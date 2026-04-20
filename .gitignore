@@ -1,0 +1,11 @@
+.vscode
+.vs
+bin
+obj
+.DS_Store
+.idea
+Thumbs.db
+*.suo
+*.user
+target
+.nuget

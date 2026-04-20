@@ -1,0 +1,35 @@
+#:schema https://developers.openai.com/codex/config-schema.json
+
+model = "gpt-5.4"
+review_model = "gpt-5.4"
+
+personality = "pragmatic"
+web_search = "live"
+
+sandbox_mode = "workspace-write"
+approval_policy = "untrusted"
+
+model_reasoning_effort = "high"
+model_reasoning_summary = "concise"
+
+project_root_markers = [".git", "wakaze.root"]
+
+project_doc_max_bytes = 65536
+
+allow_login_shell = true
+
+[shell_environment_policy]
+inherit = "all"
+
+[sandbox_workspace_write]
+network_access = true
+exclude_slash_tmp = false
+exclude_tmpdir_env_var = false
+
+[agents]
+max_threads = 4
+max_depth = 2
+
+[features]
+multi_agent = true
+smart_approvals = true
