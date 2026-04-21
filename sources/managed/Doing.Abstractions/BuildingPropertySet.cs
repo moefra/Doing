@@ -10,8 +10,8 @@ public sealed record BuildingPropertySet:PropertySet
 {
     public BuildingPropertySet(
         PropertySet globalProperties,
-        ImmutableDictionary<Moniker,Property> propertySet)
-        : base(propertySet)
+        PropertySet propertySet)
+        : base(globalProperties.Join(propertySet))
     {
         GlobalProperties = globalProperties.Properties;
 
@@ -27,5 +27,5 @@ public sealed record BuildingPropertySet:PropertySet
 
     public bool ShouldTreatWarningAsError { get; }
 
-    public IReadOnlyDictionary<Moniker, Property> GlobalProperties { get; }
+    public ImmutableDictionary<Moniker, Property> GlobalProperties { get; }
 }

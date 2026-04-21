@@ -27,16 +27,16 @@ public static class ExecutionResultExtensions
             };
         }
 
-        public static ExecutedExecutionResult Executed(string report, Property? result = null)
-            => new(report, result);
+        public static ExecutionResult Executed(string report, Property? result = null)
+            => new ExecutedExecutionResult(report, result);
 
-        public static FailedExecutionResult Failed(string reason, Exception? result = null)
-            => new(reason, result);
+        public static ExecutionResult Failed(string reason, Exception? result = null)
+            => new FailedExecutionResult(reason, result);
 
-        public static CachedExecutionResult Cached(string report, Property? result = null)
-            => new(report, result);
+        public static ExecutionResult Cached(string report, Property? result = null)
+            => new CachedExecutionResult(report, result);
 
-        public static SkippedExecutionResult Skipped(string reason)
-            => new(reason);
+        public static ExecutionResult Skipped(string reason)
+            => new SkippedExecutionResult(reason);
     }
 }

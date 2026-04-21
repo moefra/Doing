@@ -10,13 +10,14 @@ public sealed class ActionTarget : Target
 {
     public ActionTarget(Moniker name,
                         ImmutableArray<Moniker> requirements,
-                        Func<Task<ExecutionResult>> task)
+                        Func<CancellationToken,Task<ExecutionResult>> task)
         : base(name, requirements)
     {
         _task = task;
     }
 
-    private readonly Func<Task<ExecutionResult>> _task;
+    private readonly Func<CancellationToken,Task<ExecutionResult>> _task;
 
-    public override Task<ExecutionResult> ExecuteAsync() => _task.Invoke();
+    public override Task<ExecutionResult> ExecuteAsync(CancellationToken cancellationToken = default)
+        => _task.Invoke(cancellationToken);
 }

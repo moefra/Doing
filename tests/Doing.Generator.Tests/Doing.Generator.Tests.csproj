@@ -1,6 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
     <ItemGroup>
+        <ProjectReference Include="..\..\sources\managed\Doing.Abstractions\Doing.Abstractions.csproj" />
+        <ProjectReference Include="..\..\sources\managed\Doing.Generator\Doing.Generator.csproj" />
+        <PackageReference Include="Microsoft.CodeAnalysis.CSharp" VersionOverride="5.0.0" />
         <ProjectReference Include="..\..\sources\managed\Doing.Generator\Doing.Generator.csproj"
                           OutputItemType="Analyzer"
                           ReferenceOutputAssembly="false"/>

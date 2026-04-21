@@ -8,8 +8,6 @@ namespace Doing.Core;
 
 public abstract class Target : ITarget
 {
-    public abstract Task<ExecutionResult> ExecuteAsync();
-
     public Moniker Name { get; }
 
     public ImmutableArray<Moniker> Requirements { get; }
@@ -19,4 +17,6 @@ public abstract class Target : ITarget
         Name = name;
         Requirements = requirements;
     }
+
+    public abstract Task<ExecutionResult> ExecuteAsync(CancellationToken cancellationToken = default);
 }
