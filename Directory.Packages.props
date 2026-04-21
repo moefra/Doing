@@ -1,0 +1,26 @@
+<Project>
+    <PropertyGroup>
+        <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+        <MicrosoftKitVersion>10.0.6</MicrosoftKitVersion>
+    </PropertyGroup>
+
+    <ItemGroup>
+      <PackageVersion Include="Serilog" Version="4.3.1" />
+      <PackageVersion Include="Serilog.Sinks.Console" Version="6.1.1" />
+      <PackageVersion Include="Serilog.Extensions.Logging" Version="10.0.0" />
+      <PackageVersion Include="System.CommandLine" Version="2.0.6" />
+      <PackageVersion Include="MinVer" Version="7.0.0"/>
+      <PackageVersion Include="TUnit" Version="1.28.0"/>
+      <PackageVersion Include="NodaTime" Version="3.3.1"/>
+      <PackageVersion Include="Microsoft.CodeAnalysis.BannedApiAnalyzers" Version="5.0.0-1.25277.114"/>
+      <PackageVersion Include="Microsoft.SourceLink.GitHub" Version="10.0.201"/>
+      <PackageVersion Include="Microsoft.CodeAnalysis" Version="5.0.0"/>
+      <PackageVersion Include="Autofac" Version="9.1.0" />
+      <PackageVersion Include="Autofac.Extensions.DependencyInjection" Version="11.0.0" />
+      <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="$(MicrosoftKitVersion)"/>
+      <PackageVersion Include="Microsoft.Extensions.Hosting.Abstractions" Version="$(MicrosoftKitVersion)"/>
+      <PackageVersion Include="Microsoft.Extensions.Hosting" Version="$(MicrosoftKitVersion)"/>
+      <PackageVersion Include="Microsoft.Extensions.Configuration.Abstractions" Version="$(MicrosoftKitVersion)"/>
+      <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="$(MicrosoftKitVersion)"/>
+    </ItemGroup>
+</Project>
