@@ -5,4 +5,8 @@
     <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" />
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\Doing.IO\Doing.IO.csproj" />
+  </ItemGroup>
+
 </Project>

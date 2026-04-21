@@ -5,5 +5,5 @@ namespace Doing.Core;
 
 public interface ITask
 {
-    Task Execute();
+    Task Execute(CancellationToken cancellationToken = default);
 }

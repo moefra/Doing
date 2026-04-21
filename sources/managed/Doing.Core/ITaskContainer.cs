@@ -3,4 +3,7 @@
 
 namespace Doing.Core;
 
-public record TargetSet(Dictionary<string,Target> Targets);
+public interface ITaskContainer
+{
+    TaskSet TaskSet { get; }
+}

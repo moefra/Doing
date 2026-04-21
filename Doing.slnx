@@ -31,10 +31,11 @@
     <Project Path="sources/managed/Doing.Core/Doing.Core.csproj" />
     <Project Path="sources/managed/Doing.IO/Doing.IO.csproj" />
   </Folder>
-  <Folder Name="/tests/">
+  <Folder Name="/tests/" />
+  <Folder Name="/tests/managed/">
+    <Project Path="tests/managed/Doing.Core.Tests/Doing.Core.Tests.csproj" />
   </Folder>
   <Folder Name="/vendors/" />
   <Folder Name="/benchmarks/" />
   <Folder Name="/documents/" />
 </Solution>
-

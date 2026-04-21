@@ -6,7 +6,7 @@ using Microsoft.Extensions.Hosting;
 
 namespace Doing.Core;
 
-public class CoreDoingBuild : ITargetContainer
+public class CoreDoingBuild : ITaskContainer
 {
     public virtual void CmdHook(RootCommand rootCommand)
     {
@@ -22,5 +22,5 @@ public class CoreDoingBuild : ITargetContainer
 
     public virtual ParsedBuildingOptions Options { get; protected set; } = null!;
 
-    public TargetSet TargetSet { get; } = new([]);
+    public TaskSet TaskSet { get; } = new([]);
 }

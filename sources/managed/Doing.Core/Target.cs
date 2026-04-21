@@ -3,7 +3,7 @@
 
 namespace Doing.Core;
 
-public class Target
+public class Target : ITask
 {
     public string Name { get; }
 
@@ -13,9 +13,9 @@ public class Target
 
     public List<Target> Dependencies { get; } = [];
 
-    public Func<CancellationToken, Task> Action { get; set; }
+    public Func<CancellationToken, Task> Action { get; set; } = _ => Task.CompletedTask;
 
-    public Target(TargetSet container,string name, string description)
+    public Target(TaskSet container,string name, string description)
     {
         Name = name;
         Description = description;
@@ -51,4 +51,6 @@ public class Target
 
         return this;
     }
+
+    public Task Execute(CancellationToken cancellationToken = default) => Action?.Invoke(cancellationToken) ?? Task.CompletedTask;
 }

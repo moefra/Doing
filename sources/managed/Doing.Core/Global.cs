@@ -5,5 +5,5 @@ namespace Doing.Core;
 
 public static class Global
 {
-    public static string ProjectRoot { get; } = ".";
+    public static string ProjectRoot { get; set; } = ".";
 }

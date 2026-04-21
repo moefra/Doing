@@ -62,6 +62,7 @@ public class DoingBuild : CoreDoingBuild
 
     private static async Task<int> Run(IHost host,string[] args)
     {
+        bool failed = false;
         CancellationTokenSource source = new();
 
         Console.CancelKeyPress += (_,_) =>
@@ -115,12 +116,16 @@ public class DoingBuild : CoreDoingBuild
             {
                 throw new ArgumentException($"failed to parse {parsedBuildTargets}");
             }
-            
 
+            await build.TaskSet.ExecuteAllAsync(parsedBuildTargets, source.Token);
         }
         catch (OperationCanceledException) when (source.IsCancellationRequested)
         {
             // ignore
+        }
+        catch (Exception)
+        {
+            failed = true;
         }
         finally
         {
@@ -128,6 +133,6 @@ public class DoingBuild : CoreDoingBuild
             await source.CancelAsync();
         }
 
-        return 0;
+        return failed ? 1 : 0;
     }
 }

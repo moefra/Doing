@@ -9,7 +9,7 @@ public static class CoreDoingBuildExtension
     {
         public Target Target(string name, string description)
         {
-            return new Target(build.TargetSet, name, description);
+            return new Target(build.TaskSet, name, description);
         }
     }
 }

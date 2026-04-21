@@ -4,7 +4,7 @@
 using System.Collections.Immutable;
 using System.Diagnostics;
 
-namespace Doing.Core;
+namespace Doing.IO;
 
 public record ProcessSpec(
     string ExecutableFile,
