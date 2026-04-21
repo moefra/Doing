@@ -5,5 +5,5 @@ namespace Doing.Abstractions;
 
 public interface ITask
 {
-    Task<ExecutionResult> ExecuteAsync(PropertySet arguments);
+    Task<ExecutionResult> ExecuteAsync();
 }

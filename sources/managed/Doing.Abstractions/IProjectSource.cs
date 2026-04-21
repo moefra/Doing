@@ -7,5 +7,5 @@ namespace Doing.Abstractions;
 
 public interface IProjectSource
 {
-    ImmutableDictionary<Moniker,IProject> EvaluateProjectSource(PropertySet evaluatingProperties);
+    ProjectSet EvaluateProjectSource(PropertySet evaluatingProperties);
 }

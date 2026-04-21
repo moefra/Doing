@@ -5,7 +5,7 @@ using System.Collections.Immutable;
 
 namespace Doing.Abstractions;
 
-public sealed record ProjectSet(ImmutableArray<IProject> Projects)
+public sealed record ProjectSet(ImmutableDictionary<Moniker,IProject> Projects)
 {
 
 }

@@ -20,5 +20,19 @@ public static class PropertyExtensions
                 _                              => throw new ArgumentOutOfRangeException(nameof(property), property, null)
             };
         }
+
+        public T Extract<T>()
+        {
+            return property switch
+            {
+                StringProperty { Value: T v }  => v,
+                IntegerProperty { Value: T v } => v,
+                FloatProperty { Value: T v }   => v,
+                BooleanProperty { Value: T v}  => v,
+                ArrayProperty{ Value: T v }    => v,
+                OpaqueProperty { Value:T v }   => v,
+                _                              => throw new InvalidOperationException($"failed to extract value with type {typeof(T).FullName} from the property {property}")
+            };
+        }
     }
 }

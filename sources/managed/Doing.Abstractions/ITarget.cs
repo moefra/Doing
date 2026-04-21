@@ -5,6 +5,9 @@ using System.Collections.Immutable;
 
 namespace Doing.Abstractions;
 
-public record PropertySet(ImmutableDictionary<Moniker, Property> Properties)
+public interface ITarget : ITask
 {
+    Moniker Name { get; }
+
+    ImmutableArray<Moniker> Requirements { get; }
 }

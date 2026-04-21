@@ -12,4 +12,3 @@ public sealed record ExecutedExecutionResult(string Report, Property? Result) : 
 public sealed record CachedExecutionResult(string Report, Property? Cache) : ExecutionResult;
 
 public sealed record SkippedExecutionResult(string Reason) : ExecutionResult;
-

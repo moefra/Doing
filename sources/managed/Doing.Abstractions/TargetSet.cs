@@ -5,6 +5,4 @@ using System.Collections.Immutable;
 
 namespace Doing.Abstractions;
 
-public record PropertySet(ImmutableDictionary<Moniker, Property> Properties)
-{
-}
+public sealed record TargetSet(ImmutableDictionary<Moniker, ITarget> Targets);
