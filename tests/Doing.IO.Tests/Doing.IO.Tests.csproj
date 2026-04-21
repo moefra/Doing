@@ -1,0 +1,5 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="..\..\sources\managed\Doing.IO\Doing.IO.csproj" />
+  </ItemGroup>
+</Project>

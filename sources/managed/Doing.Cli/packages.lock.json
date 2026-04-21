@@ -75,14 +75,24 @@
         "contentHash": "8IBJWcCT9+e4Bmevm4T7+fQEiAh133KGiz4oiVTgJckd3Q76OFdR1falgn9lpz7+C4HJvogCDJeAa2QmvbeVtg=="
       },
       "doing.abstractions": {
-        "type": "Project"
+        "type": "Project",
+        "dependencies": {
+          "Microsoft.Extensions.DependencyInjection.Abstractions": "[10.0.6, )",
+          "Microsoft.Extensions.Logging.Abstractions": "[10.0.6, )",
+          "NodaTime": "[3.3.1, )",
+          "Zio": "[0.22.2, )"
+        }
       },
       "doing.core": {
         "type": "Project",
         "dependencies": {
           "Doing.Abstractions": "[1.0.0, )",
+          "Doing.IO": "[1.0.0, )",
           "Microsoft.Extensions.Hosting.Abstractions": "[10.0.6, )"
         }
+      },
+      "doing.io": {
+        "type": "Project"
       },
       "Microsoft.Extensions.Configuration.Abstractions": {
         "type": "CentralTransitive",
@@ -120,6 +130,18 @@
         "dependencies": {
           "Microsoft.Extensions.DependencyInjection.Abstractions": "10.0.6"
         }
+      },
+      "NodaTime": {
+        "type": "CentralTransitive",
+        "requested": "[3.3.1, )",
+        "resolved": "3.3.1",
+        "contentHash": "7zkTEqmakybTTuDuifpnzl5s8MkmpAdyvoqIPIO2+M2ThF8ixavPcPt1afPfFyCI+A6t3ySujgpGq/5iWc4/RQ=="
+      },
+      "Zio": {
+        "type": "CentralTransitive",
+        "requested": "[0.22.2, )",
+        "resolved": "0.22.2",
+        "contentHash": "+IVbcp3EY45ugzV5dyX9PC1uneEDITLgItt2fa9IZiM3Fs4Cu7Y6ZDNt3LEep+irV5XNLpHS2QDs9bURb8ZZFA=="
       }
     }
   }

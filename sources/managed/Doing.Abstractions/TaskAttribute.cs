@@ -3,7 +3,8 @@
 
 namespace Doing.Abstractions;
 
-public record Moniker(string Namespace, string Name)
+[AttributeUsage(AttributeTargets.Class, AllowMultiple = false)]
+public sealed class TaskAttribute : Attribute
 {
-    public override string ToString() => $"{Namespace}.{Name}";
+
 }

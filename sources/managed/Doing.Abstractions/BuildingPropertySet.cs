@@ -15,9 +15,9 @@ public sealed record BuildingPropertySet:PropertySet
     {
         GlobalProperties = globalProperties.Properties;
 
-        ContinueOnError = GlobalProperties[new Moniker(nameof(BuildingPropertySet),
+        ContinueOnError = GlobalProperties[new Moniker(nameof(Doing),
                                                        nameof(ContinueOnError))].Extract<bool>();
-        ShouldTreatWarningAsError = GlobalProperties[new Moniker(nameof(BuildingPropertySet),
+        ShouldTreatWarningAsError = GlobalProperties[new Moniker(nameof(Doing),
                                                                  nameof(ShouldTreatWarningAsError))].Extract<bool>();
     }
 

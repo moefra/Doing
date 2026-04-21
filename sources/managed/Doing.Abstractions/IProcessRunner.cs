@@ -3,7 +3,7 @@
 
 namespace Doing.Abstractions;
 
-public record Moniker(string Namespace, string Name)
+public interface IProcessRunner
 {
-    public override string ToString() => $"{Namespace}.{Name}";
+    
 }
