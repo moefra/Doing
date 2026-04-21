@@ -8,5 +8,8 @@ namespace Doing.Abstractions;
 public interface ITaskFactory
 {
     ImmutableArray<Moniker> CreationAblity { get; }
-    ValueTask<ITask> CreateAsync(Moniker moniker,PropertySet arguments);
+    ValueTask<ITask> CreateAsync(Moniker moniker,
+                                 PropertySet arguments,
+                                 ITaskExecutionContext context,
+                                 CancellationToken cancellationToken = default);
 }

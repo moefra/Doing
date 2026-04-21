@@ -19,7 +19,12 @@ public interface ITaskContextDateTimeExtension : ITaskExecutionContext
     IClock Clock { get; }
 }
 
-public interface ITaskContextFileSystemExtension : ITaskContextDateTimeExtension
+public interface ITaskContextFileSystemExtension : ITaskExecutionContext
 {
     IFileSystem FileSystem { get; }
+}
+
+public interface ITaskContextProcessExtension : ITaskContextFileSystemExtension
+{
+    IProcessRunner Runner { get; }
 }

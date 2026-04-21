@@ -3,7 +3,4 @@
 
 namespace Doing.Abstractions;
 
-public interface ITask
-{
-    Task<ExecutionResult> ExecuteAsync(CancellationToken cancellationToken = default);
-}
+public record ProcessResult(int ExitCode,string? Stdout,string? Stderr);
