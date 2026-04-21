@@ -172,4 +172,4 @@ csharp_space_between_parentheses = false
 csharp_space_between_square_brackets = false
 
 # License header
-file_header_template = Copyright (c) 2026 MoeGodot<me@kawayi.moe>.\nLicensed under the AGPL v3-or-later license.
+file_header_template = Copyright (c) 2026 MoeGodot<me@kawayi.moe>.\nLicensed under the GNU Affero General Public License v3-or-later license.
