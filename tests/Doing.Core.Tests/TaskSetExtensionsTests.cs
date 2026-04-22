@@ -6,6 +6,45 @@ namespace Doing.Core.Tests;
 public class TaskSetExtensionsTests
 {
     [Test]
+    public async Task Join_MergesTargetsFromBothTaskSets()
+    {
+        TaskSet left = CreateTaskSet();
+        TaskSet right = CreateTaskSet();
+        int leftCount = 0;
+        int rightCount = 0;
+
+        _ = new Target(left,"Left","Left target")
+            .Executes(() => Interlocked.Increment(ref leftCount));
+
+        _ = new Target(right,"Right","Right target")
+            .Executes(() => Interlocked.Increment(ref rightCount));
+
+        TaskSet joined = left.Join(right);
+
+        await joined.ExecuteAllAsync(["Left","Right"]);
+
+        await Assert.That(leftCount).IsEqualTo(1);
+        await Assert.That(rightCount).IsEqualTo(1);
+        await Assert.That(joined.Targets.Keys.Order(StringComparer.Ordinal).ToArray())
+                    .IsEquivalentTo(["Left","Right"]);
+    }
+
+    [Test]
+    public async Task Join_ThrowsForDuplicateTargetNames()
+    {
+        TaskSet left = CreateTaskSet();
+        TaskSet right = CreateTaskSet();
+
+        _ = new Target(left,"Build","Build target");
+        _ = new Target(right,"Build","Another build target");
+
+        Exception? exception = await CaptureExceptionAsync(() => Task.FromResult(left.Join(right)));
+
+        await Assert.That(exception is InvalidOperationException).IsTrue();
+        await Assert.That(exception?.Message.Contains("Build",StringComparison.Ordinal) ?? false).IsTrue();
+    }
+
+    [Test]
     public async Task ExecuteAllAsync_ExecutesSingleTargetOnce()
     {
         TaskSet set = CreateTaskSet();

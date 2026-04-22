@@ -1,4 +1,4 @@
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result};
 use globset::{Glob, GlobSet, GlobSetBuilder};
 use ignore::{WalkBuilder, WalkState};
 use owo_colors::OwoColorize;
@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 use std::env;
 use std::ffi::{OsStr, OsString};
+use std::fmt::{self, Write as _};
 use std::fs;
 use std::io::{self, IsTerminal};
 use std::path::{Path, PathBuf};
@@ -38,15 +39,28 @@ const BANNER_LINES: &[&str] = &[
     " |____/ \\\\___/|_|_| |_|\\\\__, |",
     "                       |___/ ",
 ];
+const HELP_CONFIG_EXAMPLE: &str = r#"version = 1
+name = "Doing"
+description = "A managed build runner powered by dotnet."
+main_project = "sources/managed/Doing.Cli/Doing.Cli.csproj"
+main_dll = "sources/managed/Doing.Cli/bin/Release/net10.0/Doing.Cli.dll"
+solution = "Doing.slnx"
+scan_roots = ["."]
+extra_inputs = ["global.json", ".editorconfig"]
+exclude_globs = ["**/bin/**", "**/obj/**", "**/.git/**", "**/.doing/**"]"#;
+
+type LauncherResult<T> = std::result::Result<T, LauncherError>;
 
 fn main() {
+    let ui = Ui::new();
     let exit_code = match program_main() {
         Ok(code) => code,
         Err(error) => {
-            eprintln!(
-                "{} {error:#}",
-                Ui::new().tag_stderr("󰅙", "error", (255, 105, 97))
-            );
+            ui.error(format!("{:#}", error.source));
+            if error.kind.should_print_help() {
+                eprintln!();
+                eprintln!("{}", render_help_text(error.kind, ui.stderr_color));
+            }
             1
         }
     };
@@ -54,7 +68,7 @@ fn main() {
     process::exit(exit_code);
 }
 
-fn program_main() -> Result<i32> {
+fn program_main() -> LauncherResult<i32> {
     let original_dir = env::current_dir().context("failed to get current working directory")?;
     let forwarded_args = env::args_os().skip(1).collect::<Vec<_>>();
 
@@ -65,14 +79,9 @@ fn run_launcher(
     original_dir: PathBuf,
     forwarded_args: Vec<OsString>,
     dotnet_program: &OsStr,
-) -> Result<i32> {
+) -> LauncherResult<i32> {
     let ui = Ui::new();
-    let doing_dir = find_doing_dir_from(&original_dir).ok_or_else(|| {
-        anyhow::anyhow!(
-            "failed to locate `.doing` from `{}` or any of its parent directories",
-            original_dir.display()
-        )
-    })?;
+    let doing_dir = find_doing_dir_or_error(&original_dir)?;
     let config = Config::load(&doing_dir)?;
 
     report_gitignore_status(gitignore_status(&config.doing_dir), &ui);
@@ -107,7 +116,13 @@ fn run_launcher(
         ui.success("cache hit, reusing the existing Release build");
     }
 
-    run_exec(&config, dotnet_program, &forwarded_args, &original_dir, &ui)
+    Ok(run_exec(
+        &config,
+        dotnet_program,
+        &forwarded_args,
+        &original_dir,
+        &ui,
+    )?)
 }
 
 #[derive(Debug, Deserialize)]
@@ -143,46 +158,73 @@ struct ResolvedConfig {
 }
 
 impl Config {
-    fn load(doing_dir: &Path) -> Result<ResolvedConfig> {
+    fn load(doing_dir: &Path) -> LauncherResult<ResolvedConfig> {
         let config_path = doing_dir.join("config.toml");
-        let contents = fs::read_to_string(&config_path)
-            .with_context(|| format!("failed to read `{}`", config_path.display()))?;
-        let config: Self = toml::from_str(&contents)
-            .with_context(|| format!("failed to parse `{}`", config_path.display()))?;
+        let contents = fs::read_to_string(&config_path).map_err(|error| {
+            LauncherError::new(
+                LauncherErrorKind::ConfigMissing,
+                anyhow::Error::new(error)
+                    .context(format!("failed to read `{}`", config_path.display())),
+            )
+        })?;
+        let config: Self = toml::from_str(&contents).map_err(|error| {
+            LauncherError::new(
+                LauncherErrorKind::ConfigParse,
+                anyhow::Error::new(error)
+                    .context(format!("failed to parse `{}`", config_path.display())),
+            )
+        })?;
 
         if config.version != CONFIG_VERSION {
-            bail!(
-                "unsupported config version `{}` in `{}`; expected `{CONFIG_VERSION}`",
-                config.version,
-                config_path.display()
-            );
+            return Err(LauncherError::new(
+                LauncherErrorKind::ConfigVersion,
+                anyhow::anyhow!(
+                    "unsupported config version `{}` in `{}`; expected `{CONFIG_VERSION}`",
+                    config.version,
+                    config_path.display()
+                ),
+            ));
         }
 
         let root_dir = canonicalize_existing(
             doing_dir
                 .parent()
                 .ok_or_else(|| anyhow::anyhow!("`.doing` directory has no parent"))?,
-        )?;
-        let doing_dir = canonicalize_existing(doing_dir)?;
-        let exclude_set = Arc::new(build_exclude_set(&config.exclude_globs)?);
+        )
+        .map_err(|error| LauncherError::new(LauncherErrorKind::Runtime, error))?;
+        let doing_dir = canonicalize_existing(doing_dir)
+            .map_err(|error| LauncherError::new(LauncherErrorKind::Runtime, error))?;
+        let exclude_set =
+            Arc::new(build_exclude_set(&config.exclude_globs).map_err(|error| {
+                LauncherError::new(LauncherErrorKind::ExcludeGlobInvalid, error)
+            })?);
 
         let main_project =
-            canonicalize_existing(&resolve_from_root(&root_dir, &config.main_project))?;
+            canonicalize_existing(&resolve_from_root(&root_dir, &config.main_project))
+                .map_err(|error| LauncherError::new(LauncherErrorKind::PathInvalid, error))?;
         if !main_project.is_file() {
-            bail!(
-                "`main_project` must point to a file: `{}`",
-                main_project.display()
-            );
+            return Err(LauncherError::new(
+                LauncherErrorKind::PathInvalid,
+                anyhow::anyhow!(
+                    "`main_project` must point to a file: `{}`",
+                    main_project.display()
+                ),
+            ));
         }
 
-        let main_project_rel = relative_path_string(&root_dir, &main_project)?;
+        let main_project_rel = relative_path_string(&root_dir, &main_project)
+            .map_err(|error| LauncherError::new(LauncherErrorKind::Runtime, error))?;
         let main_dll = normalize_path(&resolve_from_root(&root_dir, &config.main_dll));
 
         let solution = match config.solution.as_deref() {
             Some(raw) => {
-                let path = canonicalize_existing(&resolve_from_root(&root_dir, raw))?;
+                let path = canonicalize_existing(&resolve_from_root(&root_dir, raw))
+                    .map_err(|error| LauncherError::new(LauncherErrorKind::PathInvalid, error))?;
                 if !path.is_file() {
-                    bail!("`solution` must point to a file: `{}`", path.display());
+                    return Err(LauncherError::new(
+                        LauncherErrorKind::PathInvalid,
+                        anyhow::anyhow!("`solution` must point to a file: `{}`", path.display()),
+                    ));
                 }
                 Some(path)
             }
@@ -191,9 +233,13 @@ impl Config {
 
         let mut scan_roots = Vec::new();
         for raw in &config.scan_roots {
-            let path = canonicalize_existing(&resolve_from_root(&root_dir, raw))?;
+            let path = canonicalize_existing(&resolve_from_root(&root_dir, raw))
+                .map_err(|error| LauncherError::new(LauncherErrorKind::PathInvalid, error))?;
             if !path.is_dir() {
-                bail!("scan root must point to a directory: `{}`", path.display());
+                return Err(LauncherError::new(
+                    LauncherErrorKind::PathInvalid,
+                    anyhow::anyhow!("scan root must point to a directory: `{}`", path.display()),
+                ));
             }
             scan_roots.push(path);
         }
@@ -202,7 +248,11 @@ impl Config {
         for raw in &config.extra_inputs {
             let path = resolve_from_root(&root_dir, raw);
             if path.exists() {
-                extra_inputs.push(canonicalize_existing(&path)?);
+                extra_inputs.push(
+                    canonicalize_existing(&path).map_err(|error| {
+                        LauncherError::new(LauncherErrorKind::PathInvalid, error)
+                    })?,
+                );
             }
         }
 
@@ -220,6 +270,18 @@ impl Config {
             exclude_set,
         })
     }
+}
+
+fn find_doing_dir_or_error(start_dir: &Path) -> LauncherResult<PathBuf> {
+    find_doing_dir_from(start_dir).ok_or_else(|| {
+        LauncherError::new(
+            LauncherErrorKind::DoingDirNotFound,
+            anyhow::anyhow!(
+                "failed to locate `.doing` from `{}` or any of its parent directories",
+                start_dir.display()
+            ),
+        )
+    })
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -243,6 +305,72 @@ struct CacheFileRecord {
     path: String,
     kind: String,
     hash: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum LauncherErrorKind {
+    DoingDirNotFound,
+    ConfigMissing,
+    ConfigParse,
+    ConfigVersion,
+    PathInvalid,
+    ExcludeGlobInvalid,
+    Runtime,
+}
+
+impl LauncherErrorKind {
+    fn should_print_help(self) -> bool {
+        !matches!(self, Self::Runtime)
+    }
+
+    fn help_reason(self) -> &'static str {
+        match self {
+            Self::DoingDirNotFound => {
+                "程序没有在当前目录或父目录中找到 `.doing`，所以还不知道应该加载哪个项目。"
+            }
+            Self::ConfigMissing => "`.doing/config.toml` 缺失或不可读取，启动器缺少必要配置。",
+            Self::ConfigParse => {
+                "`.doing/config.toml` 存在，但 TOML 语法或字段类型不符合当前实现。"
+            }
+            Self::ConfigVersion => "`.doing/config.toml` 的 `version` 不受当前启动器支持。",
+            Self::PathInvalid => "配置里有路径无效，或路径类型与预期不匹配。",
+            Self::ExcludeGlobInvalid => "配置里的 `exclude_globs` 不是合法 glob 模式。",
+            Self::Runtime => "运行时错误。",
+        }
+    }
+}
+
+#[derive(Debug)]
+struct LauncherError {
+    kind: LauncherErrorKind,
+    source: anyhow::Error,
+}
+
+impl LauncherError {
+    fn new(kind: LauncherErrorKind, source: impl Into<anyhow::Error>) -> Self {
+        Self {
+            kind,
+            source: source.into(),
+        }
+    }
+}
+
+impl fmt::Display for LauncherError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:#}", self.source)
+    }
+}
+
+impl std::error::Error for LauncherError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        self.source.source()
+    }
+}
+
+impl From<anyhow::Error> for LauncherError {
+    fn from(source: anyhow::Error) -> Self {
+        Self::new(LauncherErrorKind::Runtime, source)
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -291,6 +419,14 @@ impl Ui {
         println!(
             "{} {}",
             self.tag_stdout("󰄬", "ok", (117, 255, 151)),
+            message.as_ref()
+        );
+    }
+
+    fn error(&self, message: impl AsRef<str>) {
+        eprintln!(
+            "{} {}",
+            self.tag_stderr("󰅙", "error", (255, 105, 97)),
             message.as_ref()
         );
     }
@@ -409,6 +545,173 @@ fn report_gitignore_status(status: GitignoreStatus, ui: &Ui) {
         GitignoreStatus::MissingCacheEntry => ui.warn(
             "`.doing/.gitignore` does not contain `cache.toml`. Add it to avoid committing local cache state.",
         ),
+    }
+}
+
+fn render_help_text(kind: LauncherErrorKind, color_enabled: bool) -> String {
+    let mut output = String::new();
+    let title = style_help_heading(color_enabled, "󰘥", "help", (162, 196, 255));
+    let section = |icon, label, rgb| style_help_heading(color_enabled, icon, label, rgb);
+
+    let _ = writeln!(&mut output, "{} {}", title, kind.help_reason());
+    let _ = writeln!(&mut output);
+
+    let _ = writeln!(
+        &mut output,
+        "{} 目录位置",
+        section("󰉋", "where", (255, 205, 86))
+    );
+    let _ = writeln!(
+        &mut output,
+        "程序会从当前工作目录开始，逐级向上查找最近的 `.doing` 目录。通常应把 `.doing` 放在项目根目录下。"
+    );
+    let _ = writeln!(&mut output, "推荐结构:");
+    let _ = writeln!(&mut output, "  <project-root>/");
+    let _ = writeln!(&mut output, "    .doing/");
+    let _ = writeln!(&mut output, "      config.toml");
+    let _ = writeln!(&mut output, "      cache.toml");
+    let _ = writeln!(&mut output, "      .gitignore");
+    let _ = writeln!(&mut output, "    sources/");
+    let _ = writeln!(&mut output);
+
+    let _ = writeln!(
+        &mut output,
+        "{} `.doing` 内文件说明",
+        section("󰈙", "files", (98, 214, 156))
+    );
+    let _ = writeln!(
+        &mut output,
+        "- `.doing/config.toml`: 必需文件，定义主项目、主 DLL、扫描根目录和排除规则。"
+    );
+    let _ = writeln!(
+        &mut output,
+        "- `.doing/cache.toml`: 启动器自动生成的缓存文件，记录已追踪输入文件的 xxh3_128 哈希。"
+    );
+    let _ = writeln!(
+        &mut output,
+        "- `.doing/.gitignore`: 建议至少包含 `cache.toml`，避免提交本地缓存状态。"
+    );
+    let _ = writeln!(&mut output);
+
+    let _ = writeln!(
+        &mut output,
+        "{} `config.toml` 示例",
+        section("󰗀", "toml", (255, 151, 98))
+    );
+    let _ = writeln!(&mut output, "```toml");
+    let _ = writeln!(&mut output, "{HELP_CONFIG_EXAMPLE}");
+    let _ = writeln!(&mut output, "```");
+    let _ = writeln!(&mut output);
+
+    let _ = writeln!(
+        &mut output,
+        "{} 字段说明",
+        section("󰛨", "fields", (174, 142, 255))
+    );
+    let _ = writeln!(
+        &mut output,
+        "- 所有相对路径都以 `.doing` 的父目录为基准解析。"
+    );
+    let _ = writeln!(&mut output, "- `version`: 当前固定为 `1`。");
+    let _ = writeln!(
+        &mut output,
+        "- `name` / `description`: 用于 banner 和帮助输出。"
+    );
+    let _ = writeln!(
+        &mut output,
+        "- `main_project`: 要执行 `dotnet build -c Release` 的主 `.csproj`。"
+    );
+    let _ = writeln!(
+        &mut output,
+        "- `main_dll`: build 后用 `dotnet exec` 启动的主 DLL。"
+    );
+    let _ = writeln!(
+        &mut output,
+        "- `solution`: 可选；若存在，会进入缓存判定，但不会作为 build 目标。"
+    );
+    let _ = writeln!(
+        &mut output,
+        "- `scan_roots`: 用来搜集 `.cs` 源文件的目录列表。"
+    );
+    let _ = writeln!(
+        &mut output,
+        "- `extra_inputs`: 手动补充其他会影响构建的输入文件。"
+    );
+    let _ = writeln!(
+        &mut output,
+        "- `exclude_globs`: 排除模式，通常用于 `bin/`、`obj/`、`.git/`、`.doing/`。"
+    );
+    let _ = writeln!(&mut output);
+
+    let _ = writeln!(
+        &mut output,
+        "{} 会纳入缓存判定的文件",
+        section("󰋚", "tracked", (115, 193, 255))
+    );
+    let _ = writeln!(&mut output, "- `scan_roots` 下的所有 `.cs`。");
+    let _ = writeln!(&mut output, "- `main_project`。");
+    let _ = writeln!(&mut output, "- `solution`，如果配置了该字段。");
+    let _ = writeln!(&mut output, "- 所有 `packages.lock.json`。");
+    let _ = writeln!(
+        &mut output,
+        "- 主项目父目录到仓库根目录之间的 `Directory.*.props` / `Directory.*.targets`。"
+    );
+    let _ = writeln!(
+        &mut output,
+        "- 仓库级 `global.json`、`.editorconfig`、`.globalconfig`、`nuget.config`、`Directory.Build.*`、`Directory.Packages.*`。"
+    );
+    let _ = writeln!(&mut output, "- `extra_inputs` 命中的文件。");
+    let _ = writeln!(
+        &mut output,
+        "- `bin/`、`obj/`、`.git/`、`.doing/` 和 `exclude_globs` 命中的路径会被排除。"
+    );
+    let _ = writeln!(&mut output);
+
+    let _ = writeln!(
+        &mut output,
+        "{} 缓存如何工作",
+        section("󰓅", "cache", (255, 189, 89))
+    );
+    let _ = writeln!(
+        &mut output,
+        "任一被追踪输入变化、`cache.toml` 缺失/损坏、或主 DLL 不存在时，启动器都会重新执行 `dotnet build <main_project> -c Release`；否则直接 `dotnet exec <main_dll>`。"
+    );
+    let _ = writeln!(&mut output);
+
+    let _ = writeln!(
+        &mut output,
+        "{} 常见修复建议",
+        section("󰌶", "fixes", (255, 123, 172))
+    );
+    let _ = writeln!(
+        &mut output,
+        "- 确认当前工作目录位于目标项目树内，且向上确实存在 `.doing/`。"
+    );
+    let _ = writeln!(
+        &mut output,
+        "- 确认 `.doing/config.toml` 的 TOML 语法正确，字符串和数组都已闭合。"
+    );
+    let _ = writeln!(
+        &mut output,
+        "- 确认 `main_project`、`main_dll`、`solution`、`scan_roots` 的路径都是相对项目根而不是相对 `.doing`。"
+    );
+    let _ = writeln!(
+        &mut output,
+        "- 确认 `.doing/.gitignore` 至少包含一行 `cache.toml`。"
+    );
+
+    output
+}
+
+fn style_help_heading(color_enabled: bool, icon: &str, label: &str, rgb: (u8, u8, u8)) -> String {
+    if color_enabled {
+        format!(
+            "{} {}",
+            icon.truecolor(rgb.0, rgb.1, rgb.2).bold(),
+            label.truecolor(rgb.0, rgb.1, rgb.2).bold()
+        )
+    } else {
+        format!("[{label}]")
     }
 }
 
@@ -951,6 +1254,99 @@ mod tests {
     }
 
     #[test]
+    fn missing_doing_directory_is_classified_as_environment_error() -> Result<()> {
+        let tempdir = TempDir::new()?;
+        let error = run_launcher(
+            tempdir.path().to_path_buf(),
+            Vec::new(),
+            OsStr::new("dotnet"),
+        )
+        .expect_err("missing .doing should fail");
+
+        assert_eq!(error.kind, LauncherErrorKind::DoingDirNotFound);
+        assert!(error.kind.should_print_help());
+
+        Ok(())
+    }
+
+    #[test]
+    fn help_text_contains_directory_files_and_toml_guidance() {
+        let help = render_help_text(LauncherErrorKind::ConfigParse, false);
+
+        assert!(help.contains(".doing/config.toml"));
+        assert!(help.contains(".doing/cache.toml"));
+        assert!(help.contains(".doing/.gitignore"));
+        assert!(help.contains("main_project"));
+        assert!(help.contains("main_dll"));
+        assert!(help.contains("scan_roots"));
+        assert!(help.contains("extra_inputs"));
+        assert!(help.contains("exclude_globs"));
+        assert!(help.contains("packages.lock.json"));
+        assert!(help.contains("Directory.*.props"));
+        assert!(help.contains("Directory.*.targets"));
+        assert!(help.contains("相对路径都以 `.doing` 的父目录为基准解析"));
+        assert!(!help.contains('\u{1b}'));
+    }
+
+    #[test]
+    fn runtime_errors_do_not_request_full_help() -> Result<()> {
+        let fixture = Fixture::new()?;
+        let missing_dotnet = fixture.root.join("missing-dotnet");
+        let error = run_launcher(
+            fixture.root.join("sources/managed/Doing.Cli"),
+            Vec::new(),
+            missing_dotnet.as_os_str(),
+        )
+        .expect_err("launch failure should error");
+
+        assert_eq!(error.kind, LauncherErrorKind::Runtime);
+        assert!(!error.kind.should_print_help());
+
+        Ok(())
+    }
+
+    #[test]
+    fn invalid_main_project_path_is_classified_and_helpful() -> Result<()> {
+        let fixture = Fixture::new()?;
+        fixture.write_config(
+            r#"
+version = 1
+name = "Doing"
+description = "A managed build runner powered by dotnet."
+main_project = "sources/managed/Doing.Cli/Missing.csproj"
+main_dll = "sources/managed/Doing.Cli/bin/Release/net10.0/Doing.Cli.dll"
+solution = "Doing.slnx"
+scan_roots = ["."]
+extra_inputs = ["global.json", ".editorconfig"]
+exclude_globs = ["**/bin/**", "**/obj/**", "**/.git/**", "**/.doing/**"]
+"#,
+        )?;
+
+        let error = Config::load(&fixture.doing_dir).expect_err("invalid project path should fail");
+        assert_eq!(error.kind, LauncherErrorKind::PathInvalid);
+
+        let help = render_help_text(error.kind, false);
+        assert!(help.contains("路径都是相对项目根而不是相对 `.doing`"));
+
+        Ok(())
+    }
+
+    #[test]
+    fn invalid_toml_is_classified_and_shows_example() -> Result<()> {
+        let fixture = Fixture::new()?;
+        fixture.write_config("version = 1\nname = \"Doing\"\nscan_roots = [\n")?;
+
+        let error = Config::load(&fixture.doing_dir).expect_err("invalid toml should fail");
+        assert_eq!(error.kind, LauncherErrorKind::ConfigParse);
+
+        let help = render_help_text(error.kind, false);
+        assert!(help.contains("```toml"));
+        assert!(help.contains("main_project = "));
+
+        Ok(())
+    }
+
+    #[test]
     fn collects_expected_inputs_and_excludes_build_artifacts() -> Result<()> {
         let fixture = Fixture::new()?;
         fs::write(
@@ -1157,6 +1553,11 @@ exclude_globs = ["**/bin/**", "**/obj/**", "**/.git/**", "**/.doing/**"]
 
         fn log_path(&self) -> PathBuf {
             self.root.join("fake-dotnet.log")
+        }
+
+        fn write_config(&self, contents: &str) -> Result<()> {
+            fs::write(self.doing_dir.join("config.toml"), contents)?;
+            Ok(())
         }
 
         fn write_fake_dotnet(&self) -> Result<PathBuf> {

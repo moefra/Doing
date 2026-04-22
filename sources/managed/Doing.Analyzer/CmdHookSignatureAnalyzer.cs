@@ -8,7 +8,7 @@ public sealed class CmdHookSignatureAnalyzer : HookMethodSignatureAnalyzerBase
 {
     private static readonly HookMethodSignatureRule Rule = new(
         diagnosticId: "DOING003",
-        attributeMetadataName: "Doing.Cli.CmdHookAttribute",
+        attributeMetadataName: "Doing.Cli.Generator.CmdHookAttribute",
         attributeDisplayName: "CmdHook",
         expectedSignature: "public static void Method(RootCommand rootCommand)",
         returnTypeMetadataName: null,

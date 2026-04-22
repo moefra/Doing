@@ -41,6 +41,12 @@
 
     <IsCliProject>false</IsCliProject>
     <IsCliProject Condition="$(MSBuildProjectName.EndsWith('.Cli'))">true</IsCliProject>
+
+    <IsGeneratorProject>false</IsGeneratorProject>
+    <IsGeneratorProject Condition="$(MSBuildProjectName.EndsWith('.Generator'))">true</IsGeneratorProject>
+
+    <IsAnalyzerProject>false</IsAnalyzerProject>
+    <IsAnalyzerProject Condition="$(MSBuildProjectName.EndsWith('.Analyzer'))">true</IsAnalyzerProject>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(IsTestProject)' != 'true'">
@@ -53,6 +59,17 @@
       <GenerateDocumentationFile>false</GenerateDocumentationFile>
       <OutputType>Exe</OutputType>
   </PropertyGroup>
+
+  <PropertyGroup Condition="'$(IsAnalyzerProject)' == 'true' OR '$(IsGeneratorProject)' == 'true'">
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
+    <IsRoslynComponent>true</IsRoslynComponent>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(IsAnalyzerProject)' == 'true' OR '$(IsGeneratorProject)' == 'true'">
+    <PackageReference Include="Microsoft.CodeAnalysis"/>
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp"/>
+  </ItemGroup>
 
   <ItemGroup>
     <None Include="$(MSBuildThisFileDirectory)/images/icon.png" Pack="true" PackagePath="\"/>

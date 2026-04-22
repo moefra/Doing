@@ -6,14 +6,18 @@ using System.CommandLine.Parsing;
 using System.Reflection;
 using Autofac;
 using Autofac.Extensions.DependencyInjection;
-using Doing.Cli;
+using Doing.Cli.Generator;
 using Doing.Core;
+using Doing.IO;
 using Microsoft.Extensions.Hosting;
 using Serilog;
 
 //namespace Doing.Cli;
 
-public class DoingBuild : CoreDoingBuild
+namespace Doing.Cli;
+
+public class DoingBuild(ParsedBuildingOptions options,DPath rootDirectory)
+    : CoreDoingBuild(options,rootDirectory)
 {
     protected static int Doing<T>(string[] args)
         where T : DoingBuild

@@ -8,7 +8,7 @@ public sealed class BuildingOptionsHookSignatureAnalyzer : HookMethodSignatureAn
 {
     private static readonly HookMethodSignatureRule Rule = new(
         diagnosticId: "DOING004",
-        attributeMetadataName: "Doing.Cli.BuildingOptionsHookAttribute",
+        attributeMetadataName: "Doing.Cli.Generator.BuildingOptionsHookAttribute",
         attributeDisplayName: "BuildingOptionsHook",
         expectedSignature: "public static ParsedBuildingOptions Method(ParsedBuildingOptions options, ParseResult parseResult)",
         returnTypeMetadataName: "Doing.Core.ParsedBuildingOptions",

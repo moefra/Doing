@@ -6,11 +6,13 @@ using Doing.IO;
 using Microsoft.Extensions.Hosting;
 using System.CommandLine;
 using System.CommandLine.Parsing;
+using Doing.Cli.Generator;
 
 namespace Doing.Sample;
 
-class Program(DPath ProjectRootDirectory,
-              BuildingOptions buildingOptions) : DoingBuild
+class Program(ParsedBuildingOptions buildingOptions,
+              DPath projectRootDirectory)
+    : DoingBuild(buildingOptions,projectRootDirectory)
 {
     public static void Main(string[] args) =>
         Doing<Program>(args);

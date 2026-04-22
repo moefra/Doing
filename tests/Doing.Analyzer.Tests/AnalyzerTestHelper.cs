@@ -21,12 +21,13 @@ internal static class AnalyzerTestHelper
                  #nullable enable
                  using Autofac;
                  using Doing.Cli;
+                 using Doing.Cli.Generator;
                  using Doing.Core;
                  using Microsoft.Extensions.Hosting;
                  using System.CommandLine;
                  using System.CommandLine.Parsing;
 
-                 public class TestBuild : DoingBuild
+                 public class TestBuild() : DoingBuild(null!,null!)
                  {
                      {{methodSource}}
                  }
@@ -39,6 +40,7 @@ internal static class AnalyzerTestHelper
                  #nullable enable
                  using Autofac;
                  using Doing.Cli;
+                 using Doing.Cli.Generator;
                  using Doing.Core;
                  using Microsoft.Extensions.Hosting;
                  using System.CommandLine;

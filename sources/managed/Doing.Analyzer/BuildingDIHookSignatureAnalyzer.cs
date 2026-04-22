@@ -8,7 +8,7 @@ public sealed class BuildingDIHookSignatureAnalyzer : HookMethodSignatureAnalyze
 {
     private static readonly HookMethodSignatureRule Rule = new(
         diagnosticId: "DOING005",
-        attributeMetadataName: "Doing.Cli.BuildingDIHookAttribute",
+        attributeMetadataName: "Doing.Cli.Generator.BuildingDIHookAttribute",
         attributeDisplayName: "BuildingDIHook",
         expectedSignature: "public static void Method(ContainerBuilder builder)",
         returnTypeMetadataName: null,

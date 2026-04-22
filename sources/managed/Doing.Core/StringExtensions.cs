@@ -119,11 +119,11 @@ public static class StringExtensions
             return sb.ToString();
         }
 
-        public ProcessSpec AsExecutable(params string[] args)
+        public ProcessSpec AsExecutable(string cwd,params string[] args)
         {
             return new ProcessSpec(
                 input,
-                Global.ProjectRoot,
+                cwd,
                 [..args]
             );
         }

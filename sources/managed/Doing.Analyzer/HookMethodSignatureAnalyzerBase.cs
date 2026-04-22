@@ -6,7 +6,7 @@ namespace Doing.Analyzer;
 
 public abstract class HookMethodSignatureAnalyzerBase : DiagnosticAnalyzer
 {
-    private const string DoingBuildMetadataName = "DoingBuild";
+    private const string DoingBuildMetadataName = "Doing.Cli.DoingBuild";
     private readonly HookMethodSignatureRule _rule;
 
     protected HookMethodSignatureAnalyzerBase(HookMethodSignatureRule rule)

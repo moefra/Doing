@@ -11,6 +11,28 @@ public static class TaskSetExtensions
 {
     extension(TaskSet set)
     {
+        public TaskSet Join(TaskSet other)
+        {
+            ArgumentNullException.ThrowIfNull(other);
+
+            var mergedTargets = new Dictionary<string,ITask>(set.Targets.Count + other.Targets.Count,set.Targets.Comparer);
+
+            foreach ((string name,ITask task) in set.Targets)
+            {
+                mergedTargets.Add(name,task);
+            }
+
+            foreach ((string name,ITask task) in other.Targets)
+            {
+                if (!mergedTargets.TryAdd(name,task))
+                {
+                    throw new InvalidOperationException($"Task '{name}' already exists in the joined TaskSet.");
+                }
+            }
+
+            return new TaskSet(mergedTargets);
+        }
+
         public async Task ExecuteAllAsync(string[] target,CancellationToken cancellationToken = default)
         {
             ArgumentNullException.ThrowIfNull(target);

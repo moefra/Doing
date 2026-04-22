@@ -8,7 +8,7 @@ public sealed class HostBuilderHookSignatureAnalyzer : HookMethodSignatureAnalyz
 {
     private static readonly HookMethodSignatureRule Rule = new(
         diagnosticId: "DOING001",
-        attributeMetadataName: "Doing.Cli.HostBuilderHookAttribute",
+        attributeMetadataName: "Doing.Cli.Generator.HostBuilderHookAttribute",
         attributeDisplayName: "HostBuilderHook",
         expectedSignature: "public static void Method(HostApplicationBuilder hostBuilder)",
         returnTypeMetadataName: null,

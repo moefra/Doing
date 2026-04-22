@@ -16,7 +16,7 @@ namespace Doing.IO;
 /// <param name="InheritEnv"><see langword="true"/> to inherit the current process environment before applying <paramref name="EnvironmentVariables"/>; otherwise only the provided variables are used.</param>
 /// <param name="RedirectStdout"><see langword="true"/> to capture standard output into the returned <see cref="ProcessResult"/>.</param>
 /// <param name="RedirectStderr"><see langword="true"/> to capture standard error into the returned <see cref="ProcessResult"/>.</param>
-/// <param name="RedirectStdinTo">Text written to standard input before waiting for process completion. Set to <see langword="null"/> to leave standard input closed.</param>
+/// <param name="RedirectStdinTo">Text written to standard input before waiting for process completion. Set to <see langword="null"/> to leave standard input inheriting current process.</param>
 public record ProcessSpec(
     string ExecutableFile,
     string WorkingDirectory,
