@@ -23,4 +23,9 @@ public class CoreDoingBuild : ITaskContainer
     public virtual ParsedBuildingOptions Options { get; protected set; } = null!;
 
     public TaskSet TaskSet { get; } = new([]);
+
+    public UnnamedTarget New()
+    {
+        return new UnnamedTarget() { Source = TaskSet };
+    }
 }

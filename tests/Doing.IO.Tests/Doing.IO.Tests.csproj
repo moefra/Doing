@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
-    <ProjectReference Include="../../../sources/managed/Doing.Core/Doing.Core.csproj" />
+    <ProjectReference Include="../../sources/managed/Doing.IO/Doing.IO.csproj" />
   </ItemGroup>
 
   <ItemGroup>

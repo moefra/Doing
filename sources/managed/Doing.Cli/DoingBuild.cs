@@ -37,12 +37,6 @@ public class DoingBuild : CoreDoingBuild
         }
         hostBuilder.ConfigureContainer(new AutofacServiceProviderFactory(), (builder) =>
         {
-            builder.RegisterType<T>()
-                   .SingleInstance()
-                   .AsSelf()
-                   .As<CoreDoingBuild>()
-                   .As<DoingBuild>();
-
             var attributeType = typeof(DIHookAttribute);
             foreach (var method in thisType.GetMethods())
             {
@@ -55,12 +49,15 @@ public class DoingBuild : CoreDoingBuild
 
         var host = hostBuilder.Build();
 
-        var task = Run(host,args);
+        var lifetime = (ILifetimeScope)(host.Services.GetService(typeof(ILifetimeScope))
+                                        ?? throw new InvalidOperationException("failed to resolve ILifetimeScope"));
+
+        var task = Run<T>(host,lifetime,args);
 
         return task.GetAwaiter().GetResult();
     }
 
-    private static async Task<int> Run(IHost host,string[] args)
+    private static async Task<int> Run<T>(IHost host,ILifetimeScope lifetimeScope,string[] args)
     {
         bool failed = false;
         CancellationTokenSource source = new();
@@ -74,29 +71,27 @@ public class DoingBuild : CoreDoingBuild
 
         try
         {
-            var build = (DoingBuild?)host.Services.GetService(typeof(DoingBuild));
-
-            if (build is null)
-            {
-                throw new InvalidOperationException("failed to get DoingBuild from the ServiceProvider of Host");
-            }
-
             var rootCommand = new RootCommand("`doing` scripting system");
 
             var buildTargets = new Argument<string[]>("build targets")
             {
                 Arity = ArgumentArity.OneOrMore,
-                DefaultValueFactory = (_) =>
-                {
-                    return build.DefaultBuild.Select((target => target.Name)).ToArray();
-                },
+                DefaultValueFactory = (_) => [],
             };
 
             rootCommand.Arguments.Add(buildTargets);
 
             var buildingOptions = new BuildingOptions(rootCommand);
 
-            build.CmdHook(rootCommand);
+            var thisType = typeof(T);
+            var attributeType = typeof(CmdHookAttribute);
+            foreach (var method in thisType.GetMethods())
+            {
+                if (method.GetCustomAttribute(attributeType) is not null)
+                {
+                    method.Invoke(null, [rootCommand]);
+                }
+            }
 
             var result = rootCommand.Parse(args);
 
@@ -108,7 +103,43 @@ public class DoingBuild : CoreDoingBuild
 
             var parsedBuildingOptions = buildingOptions.Parse(result);
 
-            build.Options = build.OptionsHook(parsedBuildingOptions, result);
+            attributeType = typeof(BuildingOptionsHookAttribute);
+            foreach (var method in thisType.GetMethods())
+            {
+                if (method.GetCustomAttribute(attributeType) is not null)
+                {
+                    parsedBuildingOptions = (ParsedBuildingOptions)(
+                        method.Invoke(null, [parsedBuildingOptions, result])
+                        ?? throw new InvalidOperationException("the BuildingOptionsHook must not return null")
+                    );
+                }
+            }
+
+            await using var subLifetime = lifetimeScope.BeginLifetimeScope((builder) =>
+            {
+                builder.RegisterInstance(parsedBuildingOptions)
+                       .SingleInstance();
+
+                builder.RegisterInstance(result)
+                       .SingleInstance();
+
+                builder.RegisterType<T>()
+                       .SingleInstance()
+                       .AsSelf()
+                       .As<CoreDoingBuild>()
+                       .As<DoingBuild>();
+
+                attributeType = typeof(SecondDIHookAttribute);
+                foreach (var method in thisType.GetMethods())
+                {
+                    if (method.GetCustomAttribute(attributeType) is not null)
+                    {
+                        method.Invoke(null, [builder]);
+                    }
+                }
+            });
+
+            var build = subLifetime.Resolve<DoingBuild>();
 
             string[]? parsedBuildTargets = result.GetValue(buildTargets);
 

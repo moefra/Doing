@@ -94,7 +94,11 @@
         "contentHash": "8IBJWcCT9+e4Bmevm4T7+fQEiAh133KGiz4oiVTgJckd3Q76OFdR1falgn9lpz7+C4HJvogCDJeAa2QmvbeVtg=="
       },
       "doing.io": {
-        "type": "Project"
+        "type": "Project",
+        "dependencies": {
+          "Tomlyn": "[1.2.0, )",
+          "YamlDotNet": "[17.0.1, )"
+        }
       },
       "Microsoft.Extensions.Configuration.Abstractions": {
         "type": "CentralTransitive",
@@ -119,6 +123,18 @@
         "dependencies": {
           "Microsoft.Extensions.DependencyInjection.Abstractions": "10.0.6"
         }
+      },
+      "Tomlyn": {
+        "type": "CentralTransitive",
+        "requested": "[1.2.0, )",
+        "resolved": "1.2.0",
+        "contentHash": "0A+7ljwgq6PmP9oxZEJw9/G+Gg8giOFCHtADfUoCzqmZOSdQ/+AZTQctaqBIreAjBNDq9PutxBMoipw7u8niRQ=="
+      },
+      "YamlDotNet": {
+        "type": "CentralTransitive",
+        "requested": "[17.0.1, )",
+        "resolved": "17.0.1",
+        "contentHash": "qVir5fehR/W5nTJyoJUibypETXaW4iRAF9cQa0FQIC9TJ3VC0qDOwm4o/RxANewj8KzPF8WMF2abBfUgi6LC4w=="
       }
     }
   }

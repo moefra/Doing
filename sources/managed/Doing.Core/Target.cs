@@ -1,26 +1,72 @@
 // Copyright (c) 2026 MoeGodot<me@kawayi.moe>.
 // Licensed under the GNU Affero General Public License v3-or-later license.
 
+using System.Diagnostics.CodeAnalysis;
+
 namespace Doing.Core;
+
+public class UnsourcedTarget
+{
+    public UnnamedTarget Source(ITaskContainer taskContainer)
+    {
+        return new UnnamedTarget() { Source = taskContainer.TaskSet };
+    }
+}
+
+public class UnnamedTarget
+{
+    public required TaskSet Source { get; init; }
+
+    public UndescriptedTarget Name(string name)
+    {
+        return new UndescriptedTarget() { Name = name, Source = Source };
+    }
+}
+
+public class UndescriptedTarget
+{
+    public required TaskSet Source { get; init; }
+    public required string Name { get; init; }
+
+    public Target Description(string description)
+    {
+        var target = new Target() { Source = Source, Name = Name, Description = description };
+        var task = Source.Targets[Name];
+        if (task is Target existedTarget)
+        {
+            if (existedTarget.Description == description)
+            {
+                return existedTarget;
+            }
+        }
+        Source.Targets[Name] = target;
+        return target;
+    }
+}
 
 public class Target : ITask
 {
-    public string Name { get; }
+    public required TaskSet Source { get; init; }
+    public required string Name { get; init; }
+    public required string Description { get; init; }
 
-    public string Description { get; }
-
-    public string CommandLineName { get; }
+    public string CommandLineName => Name.ToKebabCase();
 
     public List<Target> Dependencies { get; } = [];
 
     public Func<CancellationToken, Task> Action { get; set; } = _ => Task.CompletedTask;
 
-    public Target(TaskSet container,string name, string description)
+    public Target()
     {
+
+    }
+
+    [SetsRequiredMembers]
+    public Target(TaskSet set, string name, string description)
+    {
+        Source = set;
         Name = name;
         Description = description;
-        CommandLineName = name.ToKebabCase();
-        container.Targets.Add(Name,this);
     }
 
     public Target Executes(Action action)
@@ -53,4 +99,9 @@ public class Target : ITask
     }
 
     public Task Execute(CancellationToken cancellationToken = default) => Action?.Invoke(cancellationToken) ?? Task.CompletedTask;
+
+    public static implicit operator Target(Func<Target> value)
+    {
+        return value();
+    }
 }

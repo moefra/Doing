@@ -287,7 +287,11 @@
         }
       },
       "doing.io": {
-        "type": "Project"
+        "type": "Project",
+        "dependencies": {
+          "Tomlyn": "[1.2.0, )",
+          "YamlDotNet": "[17.0.1, )"
+        }
       },
       "Autofac": {
         "type": "CentralTransitive",
@@ -402,6 +406,18 @@
         "requested": "[2.0.6, )",
         "resolved": "2.0.6",
         "contentHash": "10CL/VxB7N5FXP5mJD5aROrfyT7g3VIk0GH9DaSR3/QlD0q+GzRD+3+HnicYI1f391IZZ41vC5t+i62NjvEbDg=="
+      },
+      "Tomlyn": {
+        "type": "CentralTransitive",
+        "requested": "[1.2.0, )",
+        "resolved": "1.2.0",
+        "contentHash": "0A+7ljwgq6PmP9oxZEJw9/G+Gg8giOFCHtADfUoCzqmZOSdQ/+AZTQctaqBIreAjBNDq9PutxBMoipw7u8niRQ=="
+      },
+      "YamlDotNet": {
+        "type": "CentralTransitive",
+        "requested": "[17.0.1, )",
+        "resolved": "17.0.1",
+        "contentHash": "qVir5fehR/W5nTJyoJUibypETXaW4iRAF9cQa0FQIC9TJ3VC0qDOwm4o/RxANewj8KzPF8WMF2abBfUgi6LC4w=="
       }
     }
   }
