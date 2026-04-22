@@ -4,7 +4,7 @@
 namespace Doing.Cli;
 
 [AttributeUsage(AttributeTargets.Method, AllowMultiple = false)]
-public class SecondDIHookAttribute : Attribute
+public class BuildingDIHookAttribute : Attribute
 {
 
 }

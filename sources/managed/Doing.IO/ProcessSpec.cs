@@ -6,6 +6,17 @@ using System.Diagnostics;
 
 namespace Doing.IO;
 
+/// <summary>
+/// Describes how an external process should be started and how its streams should be handled.
+/// </summary>
+/// <param name="ExecutableFile">The executable or command name to start.</param>
+/// <param name="WorkingDirectory">The working directory used when the process starts.</param>
+/// <param name="Arguments">The arguments passed to the executable in order.</param>
+/// <param name="EnvironmentVariables">Optional environment variables to add or override for the child process.</param>
+/// <param name="InheritEnv"><see langword="true"/> to inherit the current process environment before applying <paramref name="EnvironmentVariables"/>; otherwise only the provided variables are used.</param>
+/// <param name="RedirectStdout"><see langword="true"/> to capture standard output into the returned <see cref="ProcessResult"/>.</param>
+/// <param name="RedirectStderr"><see langword="true"/> to capture standard error into the returned <see cref="ProcessResult"/>.</param>
+/// <param name="RedirectStdinTo">Text written to standard input before waiting for process completion. Set to <see langword="null"/> to leave standard input closed.</param>
 public record ProcessSpec(
     string ExecutableFile,
     string WorkingDirectory,
@@ -16,6 +27,11 @@ public record ProcessSpec(
     bool RedirectStderr = false,
     string? RedirectStdinTo = "")
 {
+    /// <summary>
+    /// Starts the configured process, waits for it to exit, and returns its captured result.
+    /// </summary>
+    /// <returns>A <see cref="ProcessResult"/> containing the exit code and any redirected output.</returns>
+    /// <exception cref="IOException">Thrown when the process could not be started.</exception>
     public async Task<ProcessResult> Startup()
     {
         var startInfo = new ProcessStartInfo(ExecutableFile, Arguments)

@@ -67,6 +67,7 @@ public class Target : ITask
         Source = set;
         Name = name;
         Description = description;
+        set.Targets.Add(Name,this);
     }
 
     public Target Executes(Action action)

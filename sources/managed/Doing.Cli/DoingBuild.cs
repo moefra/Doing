@@ -37,7 +37,7 @@ public class DoingBuild : CoreDoingBuild
         }
         hostBuilder.ConfigureContainer(new AutofacServiceProviderFactory(), (builder) =>
         {
-            var attributeType = typeof(DIHookAttribute);
+            var attributeType = typeof(HostDIHookAttribute);
             foreach (var method in thisType.GetMethods())
             {
                 if (method.GetCustomAttribute(attributeType) is not null)
@@ -80,6 +80,17 @@ public class DoingBuild : CoreDoingBuild
             };
 
             rootCommand.Arguments.Add(buildTargets);
+
+            var projectRootDir = new Option<DirectoryInfo>("root-dir","root")
+            {
+                Arity = ArgumentArity.ExactlyOne,
+            };
+
+            var dir = Environment.GetEnvironmentVariable("DOING_ROOT");
+            if (dir is not null)
+            {
+
+            }
 
             var buildingOptions = new BuildingOptions(rootCommand);
 
@@ -129,7 +140,7 @@ public class DoingBuild : CoreDoingBuild
                        .As<CoreDoingBuild>()
                        .As<DoingBuild>();
 
-                attributeType = typeof(SecondDIHookAttribute);
+                attributeType = typeof(BuildingDIHookAttribute);
                 foreach (var method in thisType.GetMethods())
                 {
                     if (method.GetCustomAttribute(attributeType) is not null)

@@ -4,7 +4,7 @@
 namespace Doing.Cli;
 
 [AttributeUsage(AttributeTargets.Method, AllowMultiple = false)]
-public class DIHookAttribute : Attribute
+public class HostDIHookAttribute : Attribute
 {
 
 }

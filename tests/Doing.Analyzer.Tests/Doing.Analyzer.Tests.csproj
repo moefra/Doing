@@ -2,6 +2,13 @@
 
     <ItemGroup>
         <ProjectReference Include="..\..\sources\managed\Doing.Analyzer\Doing.Analyzer.csproj"/>
+        <ProjectReference Include="..\..\sources\managed\Doing.Cli\Doing.Cli.csproj"/>
+        <ProjectReference Include="..\..\sources\managed\Doing.Core\Doing.Core.csproj"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Microsoft.CodeAnalysis"/>
+        <PackageReference Include="Microsoft.CodeAnalysis.CSharp"/>
     </ItemGroup>
 
 </Project>
