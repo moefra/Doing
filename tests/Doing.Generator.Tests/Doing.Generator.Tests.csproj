@@ -1,0 +1,9 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+    <ItemGroup>
+        <ProjectReference Include="..\..\sources\managed\Doing.Cli\Doing.Cli.csproj"/>
+        <ProjectReference Include="..\..\sources\managed\Doing.Core\Doing.Core.csproj"/>
+        <ProjectReference Include="..\..\sources\managed\Doing.Generator\Doing.Generator.csproj"/>
+    </ItemGroup>
+
+</Project>

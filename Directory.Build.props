@@ -12,8 +12,8 @@
     <Deterministic>true</Deterministic>
     <ContinuousIntegrationBuild Condition="'$(CI)' == 'true' or '$(GITHUB_ACTIONS)' == 'true'">true</ContinuousIntegrationBuild>
 
-    <Authors>AwaitGodot</Authors>
-    <Copyright>Copyright ©2026 MoeGodot(me@kawayi.moe)</Copyright>
+    <Authors>AsyncGodot</Authors>
+    <Copyright>Copyright ©2026 AsyncGodot(me@kawayi.moe)</Copyright>
     <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
     <PackageLicenseExpression>AGPL-3.0-or-later</PackageLicenseExpression>
 

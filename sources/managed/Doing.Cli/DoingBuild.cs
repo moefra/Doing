@@ -8,6 +8,7 @@ using Autofac;
 using Autofac.Extensions.DependencyInjection;
 using Doing.Cli.Generator;
 using Doing.Core;
+using Doing.Core.Extensions;
 using Doing.IO;
 using Microsoft.Extensions.Hosting;
 using Serilog;
@@ -20,35 +21,29 @@ public class DoingBuild(ParsedBuildingOptions options,DPath rootDirectory)
     : CoreDoingBuild(options,rootDirectory)
 {
     protected static int Doing<T>(string[] args)
-        where T : DoingBuild
+        where T : DoingBuild,ICollectedTargetsInfo
     {
+        var thisType = typeof(T);
+
         Log.Logger = new LoggerConfiguration()
                      .WriteTo.Console()
                      .CreateLogger();
+
+        var logger = Log.Logger.ForContext<DoingBuild>();
+
+        logger.Verbose("Startup with {type}", thisType);
 
         var hostBuilder = Host.CreateApplicationBuilder();
 
         hostBuilder.Logging.AddSerilog();
 
-        var thisType = typeof(T);
-        var attributeType = typeof(HostBuilderHookAttribute);
-        foreach (var method in thisType.GetMethods())
-        {
-            if (method.GetCustomAttribute(attributeType) is not null)
-            {
-                method.Invoke(null, [hostBuilder]);
-            }
-        }
+        logger.Verbose("Invoke [HostBuilderHook]");
+        thisType.InvokeMethodWithAttribute<HostBuilderHookAttribute>(null, hostBuilder);
+
         hostBuilder.ConfigureContainer(new AutofacServiceProviderFactory(), (builder) =>
         {
-            var attributeType = typeof(HostDIHookAttribute);
-            foreach (var method in thisType.GetMethods())
-            {
-                if (method.GetCustomAttribute(attributeType) is not null)
-                {
-                    method.Invoke(null, [builder]);
-                }
-            }
+            logger.Verbose("Invoke [HostDIHook]");
+            thisType.InvokeMethodWithAttribute<HostDIHookAttribute>(null, builder);
         });
 
         var host = hostBuilder.Build();
@@ -56,13 +51,17 @@ public class DoingBuild(ParsedBuildingOptions options,DPath rootDirectory)
         var lifetime = (ILifetimeScope)(host.Services.GetService(typeof(ILifetimeScope))
                                         ?? throw new InvalidOperationException("failed to resolve ILifetimeScope"));
 
-        var task = Run<T>(host,lifetime,args);
+        logger.Verbose("Built General host");
+
+        var task = Run<T>(host,lifetime,args,logger);
 
         return task.GetAwaiter().GetResult();
     }
 
-    private static async Task<int> Run<T>(IHost host,ILifetimeScope lifetimeScope,string[] args)
+    private static async Task<int> Run<T>(IHost host,ILifetimeScope lifetimeScope,string[] args, ILogger logger)
+        where T : DoingBuild,ICollectedTargetsInfo
     {
+        var thisType = typeof(T);
         bool failed = false;
         CancellationTokenSource source = new();
 
@@ -93,20 +92,20 @@ public class DoingBuild(ParsedBuildingOptions options,DPath rootDirectory)
             var dir = Environment.GetEnvironmentVariable("DOING_ROOT");
             if (dir is not null)
             {
-
+                projectRootDir.Required = false;
+                projectRootDir.DefaultValueFactory = _ => new DirectoryInfo(dir);
+                logger.Verbose("Using DOING_ROOT as {root}",dir);
+            }
+            else
+            {
+                logger.Verbose("No environment variable 'DOING_ROOT' found");
+                projectRootDir.Required = true;
             }
 
             var buildingOptions = new BuildingOptions(rootCommand);
 
-            var thisType = typeof(T);
-            var attributeType = typeof(CmdHookAttribute);
-            foreach (var method in thisType.GetMethods())
-            {
-                if (method.GetCustomAttribute(attributeType) is not null)
-                {
-                    method.Invoke(null, [rootCommand]);
-                }
-            }
+            logger.Verbose("Invoke [CmdHook]");
+            thisType.InvokeMethodWithAttribute<CmdHookAttribute>(null, rootCommand);
 
             var result = rootCommand.Parse(args);
 
@@ -118,7 +117,9 @@ public class DoingBuild(ParsedBuildingOptions options,DPath rootDirectory)
 
             var parsedBuildingOptions = buildingOptions.Parse(result);
 
-            attributeType = typeof(BuildingOptionsHookAttribute);
+            logger.Verbose("Invoke [BuildingOptionsHook]");
+
+            var attributeType = typeof(BuildingOptionsHookAttribute);
             foreach (var method in thisType.GetMethods())
             {
                 if (method.GetCustomAttribute(attributeType) is not null)
@@ -144,24 +145,17 @@ public class DoingBuild(ParsedBuildingOptions options,DPath rootDirectory)
                        .As<CoreDoingBuild>()
                        .As<DoingBuild>();
 
-                attributeType = typeof(BuildingDIHookAttribute);
-                foreach (var method in thisType.GetMethods())
-                {
-                    if (method.GetCustomAttribute(attributeType) is not null)
-                    {
-                        method.Invoke(null, [builder]);
-                    }
-                }
+                logger.Verbose("Invoke [BuildingDIHook]");
+                thisType.InvokeMethodWithAttribute<BuildingDIHookAttribute>(null, builder);
             });
 
-            var build = subLifetime.Resolve<DoingBuild>();
+            logger.Verbose("Resolve {type}",thisType);
+            var build = subLifetime.Resolve<T>();
 
-            string[]? parsedBuildTargets = result.GetValue(buildTargets);
+            var parsedBuildTargets = result.GetValue(buildTargets) ??
+                                           build.DefaultBuild.Select((target => target.Name)).ToArray();
 
-            if (parsedBuildTargets is null)
-            {
-                throw new ArgumentException($"failed to parse {parsedBuildTargets}");
-            }
+            logger.Verbose("Execute {targets}", parsedBuildTargets);
 
             await build.TaskSet.ExecuteAllAsync(parsedBuildTargets, source.Token);
         }

@@ -23,18 +23,20 @@
     <File Path=".codex/agents/reviewer.toml" />
   </Folder>
   <Folder Name="/samples/">
-    <Project Path="samples/Doing.Analyzer.Sample/Doing.Analyzer.Sample.csproj" />
     <Project Path="samples/Doing.Sample/Doing.Sample.csproj" />
   </Folder>
   <Folder Name="/sources/" />
   <Folder Name="/sources/managed/">
     <Project Path="sources/managed/Doing.Analyzer/Doing.Analyzer.csproj" />
     <Project Path="sources/managed/Doing.Cli/Doing.Cli.csproj" />
+    <Project Path="sources/managed/Doing.Core.Extensions/Doing.Core.Extensions.csproj" />
     <Project Path="sources/managed/Doing.Core/Doing.Core.csproj" />
+    <Project Path="sources/managed/Doing.Generator/Doing.Generator.csproj" />
     <Project Path="sources/managed/Doing.IO/Doing.IO.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Doing.Core.Tests/Doing.Core.Tests.csproj" />
+    <Project Path="tests/Doing.Generator.Tests/Doing.Generator.Tests.csproj" />
     <Project Path="tests/Doing.IO.Tests/Doing.IO.Tests.csproj" />
     <Project Path="tests/Doing.Analyzer.Tests/Doing.Analyzer.Tests.csproj" />
   </Folder>

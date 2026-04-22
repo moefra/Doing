@@ -11,8 +11,9 @@ using Doing.Cli.Generator;
 namespace Doing.Sample;
 
 [DoingBuild]
-class Program(ParsedBuildingOptions buildingOptions,
-              DPath projectRootDirectory)
+[CollectTargetsInfo]
+partial class Program(ParsedBuildingOptions buildingOptions,
+                      DPath projectRootDirectory)
     : DoingBuild(buildingOptions,projectRootDirectory)
 {
     public static void Main(string[] args) =>

@@ -271,6 +271,7 @@
           "Autofac": "[9.1.0, )",
           "Autofac.Extensions.DependencyInjection": "[11.0.0, )",
           "Doing.Core": "[1.0.0, )",
+          "Doing.Core.Extensions": "[1.0.0, )",
           "Doing.IO": "[1.0.0, )",
           "Microsoft.Extensions.Hosting": "[10.0.6, )",
           "Serilog": "[4.3.1, )",
@@ -285,6 +286,9 @@
           "Microsoft.Extensions.Hosting.Abstractions": "[10.0.6, )",
           "System.CommandLine": "[2.0.6, )"
         }
+      },
+      "doing.core.extensions": {
+        "type": "Project"
       },
       "doing.io": {
         "type": "Project",

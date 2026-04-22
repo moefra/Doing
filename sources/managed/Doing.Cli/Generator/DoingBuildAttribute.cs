@@ -3,8 +3,11 @@
 
 namespace Doing.Cli.Generator;
 
-[AttributeUsage(AttributeTargets.Class, AllowMultiple = false)]
-public class DoingBuildAttribute : Attribute
+/// <summary>
+/// this attribute is a mark and **must not** be analyzer or generator's trigger
+/// </summary>
+[AttributeUsage(AttributeTargets.Class)]
+public sealed class DoingBuildAttribute : Attribute
 {
 
 }

@@ -10,6 +10,7 @@
     <PackageReference Include="Serilog" />
     <PackageReference Include="Serilog.Sinks.Console" />
     <PackageReference Include="Serilog.Extensions.Logging" />
+    <ProjectReference Include="..\Doing.Core.Extensions\Doing.Core.Extensions.csproj" />
     <ProjectReference Include="..\Doing.Core\Doing.Core.csproj" />
     <ProjectReference Include="..\Doing.IO\Doing.IO.csproj" />
     <PackageReference Include="Microsoft.Extensions.Hosting" />

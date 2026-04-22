@@ -7,5 +7,5 @@ namespace Doing.Cli.Generator;
 
 public interface ICollectedTargetsInfo
 {
-    ImmutableDictionary<string, string> TargetsNameToDescription { get; }
+    static abstract ImmutableDictionary<string, string> TargetsNameToDescription { get; }
 }

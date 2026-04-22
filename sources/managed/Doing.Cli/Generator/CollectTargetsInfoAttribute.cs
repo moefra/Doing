@@ -3,7 +3,7 @@
 
 namespace Doing.Cli.Generator;
 
-[AttributeUsage(AttributeTargets.Class,AllowMultiple = false)]
+[AttributeUsage(AttributeTargets.Class)]
 public class CollectTargetsInfoAttribute : Attribute
 {
 
