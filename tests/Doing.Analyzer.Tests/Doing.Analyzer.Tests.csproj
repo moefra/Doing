@@ -4,8 +4,4 @@
         <ProjectReference Include="..\..\sources\managed\Doing.Analyzer\Doing.Analyzer.csproj"/>
     </ItemGroup>
 
-  <ItemGroup>
-    <PackageReference Include="TUnit" />
-  </ItemGroup>
-
 </Project>

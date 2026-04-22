@@ -4,8 +4,4 @@
     <ProjectReference Include="../../sources/managed/Doing.Core/Doing.Core.csproj" />
   </ItemGroup>
 
-  <ItemGroup>
-    <PackageReference Include="TUnit" />
-  </ItemGroup>
-
 </Project>
