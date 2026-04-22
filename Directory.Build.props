@@ -47,6 +47,12 @@
 
     <IsAnalyzerProject>false</IsAnalyzerProject>
     <IsAnalyzerProject Condition="$(MSBuildProjectName.EndsWith('.Analyzer'))">true</IsAnalyzerProject>
+
+    <IsAnalyzerTestProject>false</IsAnalyzerTestProject>
+    <IsAnalyzerTestProject Condition="$(MSBuildProjectName.EndsWith('.Analyzer.Tests'))">true</IsAnalyzerTestProject>
+
+    <IsGeneratorTestProject>false</IsGeneratorTestProject>
+    <IsGeneratorTestProject Condition="$(MSBuildProjectName.EndsWith('.Generator.Tests'))">true</IsGeneratorTestProject>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(IsTestProject)' != 'true'">
@@ -67,8 +73,12 @@
   </PropertyGroup>
 
   <ItemGroup Condition="'$(IsAnalyzerProject)' == 'true' OR '$(IsGeneratorProject)' == 'true'">
-    <PackageReference Include="Microsoft.CodeAnalysis"/>
+    <PackageReference Include="Microsoft.CodeAnalysis.Common"/>
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp"/>
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(IsAnalyzerTestProject)' == 'true' OR '$(IsGeneratorTestProject)' == 'true'">
+    <PackageReference Include="Microsoft.CodeAnalysis"/>
   </ItemGroup>
 
   <ItemGroup>
