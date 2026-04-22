@@ -13,8 +13,6 @@ using Doing.IO;
 using Microsoft.Extensions.Hosting;
 using Serilog;
 
-//namespace Doing.Cli;
-
 namespace Doing.Cli;
 
 public class DoingBuild(ParsedBuildingOptions options,DPath rootDirectory)

@@ -5,7 +5,6 @@ using Doing.Core;
 using Doing.IO;
 using Microsoft.Extensions.Hosting;
 using System.CommandLine;
-using System.CommandLine.Parsing;
 using Doing.Cli.Generator;
 
 namespace Doing.Sample;

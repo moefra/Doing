@@ -9,6 +9,7 @@
 
     <ItemGroup>
       <ProjectReference Include="..\..\sources\managed\Doing.Cli\Doing.Cli.csproj" />
+      
       <ProjectReference Include="..\..\sources\managed\Doing.Generator\Doing.Generator.csproj"
                         OutputItemType="Analyzer"
                         ReferenceOutputAssembly="false" />

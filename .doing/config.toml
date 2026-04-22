@@ -1,2 +1,4 @@
-
-
+version = 1
+name = "Doing"
+description = "A managed build runner powered by dotnet."
+main_project = "building/Doing.Building/Doing.Building.csproj"

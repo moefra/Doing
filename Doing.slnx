@@ -42,5 +42,8 @@
   </Folder>
   <Folder Name="/vendors/" />
   <Folder Name="/benchmarks/" />
+  <Folder Name="/building/">
+    <Project Path="building/Doing.Building/Doing.Building.csproj" />
+  </Folder>
   <Folder Name="/documents/" />
 </Solution>
