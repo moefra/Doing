@@ -6,25 +6,34 @@ using System.CommandLine.Parsing;
 using System.Reflection;
 using Autofac;
 using Autofac.Extensions.DependencyInjection;
+using Autofac.Features.AttributeFilters;
 using Doing.Cli.Generator;
 using Doing.Core;
 using Doing.Core.Extensions;
 using Doing.IO;
+using Kawayi.Demystifier;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using Serilog;
+using Serilog.Sinks.SystemConsole.Themes;
 
 namespace Doing.Cli;
 
 public class DoingBuild(ParsedBuildingOptions options,DPath rootDirectory)
     : CoreDoingBuild(options,rootDirectory)
 {
+    public const string RootDirectoryPathKey = $"{nameof(RootDirectoryPathKey)}";
+
     protected static int Doing<T>(string[] args)
         where T : DoingBuild,ICollectedTargetsInfo
     {
         var thisType = typeof(T);
 
         Log.Logger = new LoggerConfiguration()
-                     .WriteTo.Console()
+                     .WriteTo.Console(
+                         theme:AnsiConsoleTheme.Literate,
+                         outputTemplate:"-{Timestamp:HH:mm:ss} {Level:u3}{NewLine}\t{Message:lj}{NewLine}{Exception}")
+                     .MinimumLevel.Verbose()
                      .CreateLogger();
 
         var logger = Log.Logger.ForContext<DoingBuild>();
@@ -33,6 +42,7 @@ public class DoingBuild(ParsedBuildingOptions options,DPath rootDirectory)
 
         var hostBuilder = Host.CreateApplicationBuilder();
 
+        hostBuilder.Logging.ClearProviders();
         hostBuilder.Logging.AddSerilog();
 
         logger.Verbose("Invoke [HostBuilderHook]");
@@ -56,17 +66,12 @@ public class DoingBuild(ParsedBuildingOptions options,DPath rootDirectory)
         return task.GetAwaiter().GetResult();
     }
 
-    private static async Task<int> Run<T>(IHost host,ILifetimeScope lifetimeScope,string[] args, ILogger logger)
+    private static async Task<int> Run<T>(IHost host,ILifetimeScope lifetimeScope,string[] args, Serilog.ILogger logger)
         where T : DoingBuild,ICollectedTargetsInfo
     {
         var thisType = typeof(T);
         bool failed = false;
         CancellationTokenSource source = new();
-
-        Console.CancelKeyPress += (_,_) =>
-        {
-            source.Cancel();
-        };
 
         await host.StartAsync(source.Token);
 
@@ -76,22 +81,18 @@ public class DoingBuild(ParsedBuildingOptions options,DPath rootDirectory)
 
             var buildTargets = new Argument<string[]>("build targets")
             {
-                Arity = ArgumentArity.OneOrMore,
-                DefaultValueFactory = (_) => [],
+                Arity = ArgumentArity.ZeroOrMore,
             };
 
             rootCommand.Arguments.Add(buildTargets);
 
-            var projectRootDir = new Option<DirectoryInfo>("root-dir","root")
-            {
-                Arity = ArgumentArity.ExactlyOne,
-            };
+            var projectRootDir = new Option<string>("root-dir", "root");
 
             var dir = Environment.GetEnvironmentVariable("DOING_ROOT");
             if (dir is not null)
             {
                 projectRootDir.Required = false;
-                projectRootDir.DefaultValueFactory = _ => new DirectoryInfo(dir);
+                projectRootDir.DefaultValueFactory = _ => dir;
                 logger.Verbose("Using DOING_ROOT as {root}",dir);
             }
             else
@@ -99,6 +100,7 @@ public class DoingBuild(ParsedBuildingOptions options,DPath rootDirectory)
                 logger.Verbose("No environment variable 'DOING_ROOT' found");
                 projectRootDir.Required = true;
             }
+            rootCommand.Options.Add(projectRootDir);
 
             var buildingOptions = new BuildingOptions(rootCommand);
 
@@ -112,6 +114,9 @@ public class DoingBuild(ParsedBuildingOptions options,DPath rootDirectory)
             {
                 Log.Error("Program argument parse error:{error}", resultError);
             }
+
+            var parsedProjectRootDir = result.GetValue(projectRootDir)
+                ?? throw new ArgumentException("failed to resolve RootDirectory argument");
 
             var parsedBuildingOptions = buildingOptions.Parse(result);
 
@@ -141,7 +146,10 @@ public class DoingBuild(ParsedBuildingOptions options,DPath rootDirectory)
                        .SingleInstance()
                        .AsSelf()
                        .As<CoreDoingBuild>()
-                       .As<DoingBuild>();
+                       .As<DoingBuild>()
+                       .WithAttributeFiltering();;
+
+                builder.RegisterInstance<DPath>(parsedProjectRootDir).Keyed<DPath>(RootDirectoryPathKey);
 
                 logger.Verbose("Invoke [BuildingDIHook]");
                 thisType.InvokeMethodWithAttribute<BuildingDIHookAttribute>(null, builder);
@@ -150,10 +158,14 @@ public class DoingBuild(ParsedBuildingOptions options,DPath rootDirectory)
             logger.Verbose("Resolve {type}",thisType);
             var build = subLifetime.Resolve<T>();
 
-            var parsedBuildTargets = result.GetValue(buildTargets) ??
-                                           build.DefaultBuild.Select((target => target.Name)).ToArray();
+            var targets = result.GetValue(buildTargets);
 
-            logger.Verbose("Execute {targets}", parsedBuildTargets);
+            var parsedBuildTargets =
+                (targets is null || targets.Length == 0)
+                ? build.DefaultBuild.Select((target => target.Name)).ToArray()
+                : targets;
+
+            logger.Verbose("Request to execute {targets}", parsedBuildTargets);
 
             await build.TaskSet.ExecuteAllAsync(parsedBuildTargets, source.Token);
         }
@@ -161,8 +173,9 @@ public class DoingBuild(ParsedBuildingOptions options,DPath rootDirectory)
         {
             // ignore
         }
-        catch (Exception)
+        catch (Exception exception)
         {
+            logger.Error(exception.Demystify(), "catch exception when building");
             failed = true;
         }
         finally

@@ -33,11 +33,6 @@
           "System.IO.Hashing": "10.0.5"
         }
       },
-      "Microsoft.CodeAnalysis.Analyzers": {
-        "type": "Transitive",
-        "resolved": "3.11.0",
-        "contentHash": "v/EW3UE8/lbEYHoC2Qq7AR/DnmvpgdtAMndfQNmpuIMx/Mto8L5JnuCfdBYtgvalQOtfNCnxFejxuRrryvUTsg=="
-      },
       "Microsoft.Extensions.Configuration": {
         "type": "Transitive",
         "resolved": "10.0.6",
@@ -270,13 +265,6 @@
         "resolved": "10.0.5",
         "contentHash": "8IBJWcCT9+e4Bmevm4T7+fQEiAh133KGiz4oiVTgJckd3Q76OFdR1falgn9lpz7+C4HJvogCDJeAa2QmvbeVtg=="
       },
-      "doing.analyzer": {
-        "type": "Project",
-        "dependencies": {
-          "Microsoft.CodeAnalysis.CSharp": "[5.0.0, )",
-          "Microsoft.CodeAnalysis.Common": "[5.0.0, )"
-        }
-      },
       "doing.cli": {
         "type": "Project",
         "dependencies": {
@@ -285,6 +273,7 @@
           "Doing.Core": "[1.0.0, )",
           "Doing.Core.Extensions": "[1.0.0, )",
           "Doing.IO": "[1.0.0, )",
+          "Kawayi.Demystifier": "[0.3.2, )",
           "Microsoft.Extensions.Hosting": "[10.0.6, )",
           "Serilog": "[4.3.1, )",
           "Serilog.Extensions.Logging": "[10.0.0, )",
@@ -296,18 +285,12 @@
         "dependencies": {
           "Doing.IO": "[1.0.0, )",
           "Microsoft.Extensions.Hosting.Abstractions": "[10.0.6, )",
+          "Serilog": "[4.3.1, )",
           "System.CommandLine": "[2.0.6, )"
         }
       },
       "doing.core.extensions": {
         "type": "Project"
-      },
-      "doing.generator": {
-        "type": "Project",
-        "dependencies": {
-          "Microsoft.CodeAnalysis.CSharp": "[5.0.0, )",
-          "Microsoft.CodeAnalysis.Common": "[5.0.0, )"
-        }
       },
       "doing.io": {
         "type": "Project",
@@ -332,24 +315,11 @@
           "Microsoft.Extensions.DependencyInjection.Abstractions": "10.0.4"
         }
       },
-      "Microsoft.CodeAnalysis.Common": {
+      "Kawayi.Demystifier": {
         "type": "CentralTransitive",
-        "requested": "[5.0.0, )",
-        "resolved": "5.0.0",
-        "contentHash": "ZXRAdvH6GiDeHRyd3q/km8Z44RoM6FBWHd+gen/la81mVnAdHTEsEkO5J0TCNXBymAcx5UYKt5TvgKBhaLJEow==",
-        "dependencies": {
-          "Microsoft.CodeAnalysis.Analyzers": "3.11.0"
-        }
-      },
-      "Microsoft.CodeAnalysis.CSharp": {
-        "type": "CentralTransitive",
-        "requested": "[5.0.0, )",
-        "resolved": "5.0.0",
-        "contentHash": "5DSyJ9bk+ATuDy7fp2Zt0mJStDVKbBoiz1DyfAwSa+k4H4IwykAUcV3URelw5b8/iVbfSaOwkwmPUZH6opZKCw==",
-        "dependencies": {
-          "Microsoft.CodeAnalysis.Analyzers": "3.11.0",
-          "Microsoft.CodeAnalysis.Common": "[5.0.0]"
-        }
+        "requested": "[0.3.2, )",
+        "resolved": "0.3.2",
+        "contentHash": "KFHTPYYNbYJuXSuMIa7ghejlfyRLjRi0btaJdzkZ5rit81ZLXOpt1G3TYRVJMfxzg0UInLxR0huh4/uiNqJDAA=="
       },
       "Microsoft.Extensions.Configuration.Abstractions": {
         "type": "CentralTransitive",

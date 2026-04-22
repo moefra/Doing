@@ -500,6 +500,7 @@
           "Doing.Core": "[1.0.0, )",
           "Doing.Core.Extensions": "[1.0.0, )",
           "Doing.IO": "[1.0.0, )",
+          "Kawayi.Demystifier": "[0.3.2, )",
           "Microsoft.Extensions.Hosting": "[10.0.6, )",
           "Serilog": "[4.3.1, )",
           "Serilog.Extensions.Logging": "[10.0.0, )",
@@ -511,6 +512,7 @@
         "dependencies": {
           "Doing.IO": "[1.0.0, )",
           "Microsoft.Extensions.Hosting.Abstractions": "[10.0.6, )",
+          "Serilog": "[4.3.1, )",
           "System.CommandLine": "[2.0.6, )"
         }
       },
@@ -546,6 +548,12 @@
           "Autofac": "9.1.0",
           "Microsoft.Extensions.DependencyInjection.Abstractions": "10.0.4"
         }
+      },
+      "Kawayi.Demystifier": {
+        "type": "CentralTransitive",
+        "requested": "[0.3.2, )",
+        "resolved": "0.3.2",
+        "contentHash": "KFHTPYYNbYJuXSuMIa7ghejlfyRLjRi0btaJdzkZ5rit81ZLXOpt1G3TYRVJMfxzg0UInLxR0huh4/uiNqJDAA=="
       },
       "Microsoft.CodeAnalysis.Common": {
         "type": "CentralTransitive",

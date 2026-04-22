@@ -39,10 +39,11 @@ const BANNER_LINES: &[&str] = &[
     " |____/ \\\\___/|_|_| |_|\\\\__, |",
     "                       |___/ ",
 ];
-const HELP_CONFIG_EXAMPLE: &str = r#"version = 1
-name = "Doing"
-description = "A managed build runner powered by dotnet."
+const HELP_CONFIG_MINIMAL_EXAMPLE: &str = r#"version = 1
+main_project = "sources/managed/Doing.Cli/Doing.Cli.csproj""#;
+const HELP_CONFIG_FULL_EXAMPLE: &str = r#"version = 1
 main_project = "sources/managed/Doing.Cli/Doing.Cli.csproj"
+
 main_dll = "sources/managed/Doing.Cli/bin/Release/net10.0/Doing.Cli.dll"
 solution = "Doing.slnx"
 scan_roots = ["."]
@@ -82,7 +83,7 @@ fn run_launcher(
 ) -> LauncherResult<i32> {
     let ui = Ui::new();
     let doing_dir = find_doing_dir_or_error(&original_dir)?;
-    let config = Config::load(&doing_dir)?;
+    let config = Config::load(&doing_dir, dotnet_program)?;
 
     report_gitignore_status(gitignore_status(&config.doing_dir), &ui);
 
@@ -128,14 +129,13 @@ fn run_launcher(
 #[derive(Debug, Deserialize)]
 struct Config {
     version: u32,
-    name: String,
-    description: String,
     main_project: String,
-    main_dll: String,
+    #[serde(default)]
+    main_dll: Option<String>,
     #[serde(default)]
     solution: Option<String>,
-    #[serde(default = "default_scan_roots")]
-    scan_roots: Vec<String>,
+    #[serde(default)]
+    scan_roots: Option<Vec<String>>,
     #[serde(default = "default_exclude_globs")]
     exclude_globs: Vec<String>,
     #[serde(default)]
@@ -146,8 +146,6 @@ struct Config {
 struct ResolvedConfig {
     root_dir: PathBuf,
     doing_dir: PathBuf,
-    name: String,
-    description: String,
     main_project: PathBuf,
     main_project_rel: String,
     main_dll: PathBuf,
@@ -157,8 +155,28 @@ struct ResolvedConfig {
     exclude_set: Arc<GlobSet>,
 }
 
+#[derive(Debug, Clone)]
+struct MsbuildProperties {
+    assembly_name: String,
+    output_path: PathBuf,
+}
+
+#[derive(Debug, Deserialize)]
+struct MsbuildGetPropertyResponse {
+    #[serde(rename = "Properties")]
+    properties: MsbuildPropertiesPayload,
+}
+
+#[derive(Debug, Deserialize)]
+struct MsbuildPropertiesPayload {
+    #[serde(rename = "AssemblyName")]
+    assembly_name: Option<String>,
+    #[serde(rename = "OutputPath")]
+    output_path: Option<String>,
+}
+
 impl Config {
-    fn load(doing_dir: &Path) -> LauncherResult<ResolvedConfig> {
+    fn load(doing_dir: &Path, dotnet_program: &OsStr) -> LauncherResult<ResolvedConfig> {
         let config_path = doing_dir.join("config.toml");
         let contents = fs::read_to_string(&config_path).map_err(|error| {
             LauncherError::new(
@@ -214,7 +232,29 @@ impl Config {
 
         let main_project_rel = relative_path_string(&root_dir, &main_project)
             .map_err(|error| LauncherError::new(LauncherErrorKind::Runtime, error))?;
-        let main_dll = normalize_path(&resolve_from_root(&root_dir, &config.main_dll));
+        let inferred_msbuild = if config.main_dll.is_none() {
+            Some(infer_msbuild_properties(
+                &root_dir,
+                &main_project,
+                &main_project_rel,
+                dotnet_program,
+            )?)
+        } else {
+            None
+        };
+
+        let main_dll = match config.main_dll.as_deref() {
+            Some(raw) => normalize_path(&resolve_from_root(&root_dir, raw)),
+            None => infer_main_dll_path(
+                &main_project,
+                inferred_msbuild.as_ref().ok_or_else(|| {
+                    LauncherError::new(
+                        LauncherErrorKind::Runtime,
+                        anyhow::anyhow!("failed to infer `main_dll` from MSBuild properties"),
+                    )
+                })?,
+            )?,
+        };
 
         let solution = match config.solution.as_deref() {
             Some(raw) => {
@@ -228,11 +268,13 @@ impl Config {
                 }
                 Some(path)
             }
-            None => None,
+            None => infer_solution_path(&root_dir)
+                .map_err(|error| LauncherError::new(LauncherErrorKind::Runtime, error))?,
         };
 
+        let configured_scan_roots = config.scan_roots.unwrap_or_else(default_scan_roots);
         let mut scan_roots = Vec::new();
-        for raw in &config.scan_roots {
+        for raw in &configured_scan_roots {
             let path = canonicalize_existing(&resolve_from_root(&root_dir, raw))
                 .map_err(|error| LauncherError::new(LauncherErrorKind::PathInvalid, error))?;
             if !path.is_dir() {
@@ -259,8 +301,6 @@ impl Config {
         Ok(ResolvedConfig {
             root_dir,
             doing_dir,
-            name: config.name,
-            description: config.description,
             main_project,
             main_project_rel,
             main_dll,
@@ -282,6 +322,135 @@ fn find_doing_dir_or_error(start_dir: &Path) -> LauncherResult<PathBuf> {
             ),
         )
     })
+}
+
+fn infer_msbuild_properties(
+    root_dir: &Path,
+    main_project: &Path,
+    main_project_rel: &str,
+    dotnet_program: &OsStr,
+) -> LauncherResult<MsbuildProperties> {
+    let output = Command::new(dotnet_program)
+        .arg("msbuild")
+        .arg(main_project_rel)
+        .arg("-p:Configuration=Release")
+        .arg("-getProperty:TargetFramework,AssemblyName,OutputPath")
+        .current_dir(root_dir)
+        .env("DOING_ROOT", root_dir)
+        .output()
+        .with_context(|| format!("failed to launch `{}`", dotnet_program.to_string_lossy()))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_owned();
+        let stdout = String::from_utf8_lossy(&output.stdout).trim().to_owned();
+        let details = if !stderr.is_empty() {
+            stderr
+        } else if !stdout.is_empty() {
+            stdout
+        } else {
+            format!(
+                "process exited with code {}",
+                exit_code_from_status(output.status)
+            )
+        };
+
+        return Err(LauncherError::new(
+            LauncherErrorKind::Runtime,
+            anyhow::anyhow!(
+                "failed to infer MSBuild properties for `{}`: {}",
+                main_project.display(),
+                details
+            ),
+        ));
+    }
+
+    let response: MsbuildGetPropertyResponse =
+        serde_json::from_slice(&output.stdout).map_err(|error| {
+            LauncherError::new(
+                LauncherErrorKind::Runtime,
+                anyhow::Error::new(error)
+                    .context("failed to parse `dotnet msbuild -getProperty` JSON output"),
+            )
+        })?;
+
+    let assembly_name = response
+        .properties
+        .assembly_name
+        .filter(|value| !value.trim().is_empty())
+        .ok_or_else(|| {
+            LauncherError::new(
+                LauncherErrorKind::Runtime,
+                anyhow::anyhow!(
+                    "MSBuild did not return `AssemblyName` for `{}`",
+                    main_project.display()
+                ),
+            )
+        })?;
+    let output_path = response
+        .properties
+        .output_path
+        .filter(|value| !value.trim().is_empty())
+        .ok_or_else(|| {
+            LauncherError::new(
+                LauncherErrorKind::Runtime,
+                anyhow::anyhow!(
+                    "MSBuild did not return `OutputPath` for `{}`",
+                    main_project.display()
+                ),
+            )
+        })?;
+
+    Ok(MsbuildProperties {
+        assembly_name,
+        output_path: msbuild_path_to_pathbuf(&output_path),
+    })
+}
+
+fn infer_main_dll_path(
+    main_project: &Path,
+    properties: &MsbuildProperties,
+) -> LauncherResult<PathBuf> {
+    let project_dir = main_project.parent().ok_or_else(|| {
+        LauncherError::new(
+            LauncherErrorKind::Runtime,
+            anyhow::anyhow!("main project has no parent directory"),
+        )
+    })?;
+
+    Ok(normalize_path(
+        &project_dir
+            .join(&properties.output_path)
+            .join(format!("{}.dll", properties.assembly_name)),
+    ))
+}
+
+fn infer_solution_path(root_dir: &Path) -> Result<Option<PathBuf>> {
+    let mut matches = Vec::new();
+    for entry in fs::read_dir(root_dir)
+        .with_context(|| format!("failed to read `{}`", root_dir.display()))?
+    {
+        let entry = entry
+            .with_context(|| format!("failed to read an entry under `{}`", root_dir.display()))?;
+        let path = entry.path();
+        if !path.is_file() {
+            continue;
+        }
+
+        let extension = path.extension().and_then(|value| value.to_str());
+        if matches!(extension, Some("sln" | "slnx")) {
+            matches.push(canonicalize_existing(&path)?);
+        }
+    }
+
+    Ok(if matches.len() == 1 {
+        matches.into_iter().next()
+    } else {
+        None
+    })
+}
+
+fn msbuild_path_to_pathbuf(raw: &str) -> PathBuf {
+    PathBuf::from(raw.replace('\\', "/"))
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -498,16 +667,6 @@ fn print_banner(config: &ResolvedConfig, ui: &Ui) {
 
     println!(
         "{} {}",
-        ui.tag_stdout("󰎙", "project", (255, 151, 98)),
-        config.name
-    );
-    println!(
-        "{} {}",
-        ui.tag_stdout("󰇮", "about", (98, 214, 156)),
-        config.description
-    );
-    println!(
-        "{} {}",
         ui.tag_stdout("󰌹", "repo", (86, 187, 255)),
         env!("CARGO_PKG_REPOSITORY")
     );
@@ -581,7 +740,7 @@ fn render_help_text(kind: LauncherErrorKind, color_enabled: bool) -> String {
     );
     let _ = writeln!(
         &mut output,
-        "- `.doing/config.toml`: 必需文件，定义主项目、主 DLL、扫描根目录和排除规则。"
+        "- `.doing/config.toml`: 必需文件；只保留构建和运行所需字段，最小只需要 `version` 和 `main_project`。"
     );
     let _ = writeln!(
         &mut output,
@@ -598,8 +757,14 @@ fn render_help_text(kind: LauncherErrorKind, color_enabled: bool) -> String {
         "{} `config.toml` 示例",
         section("󰗀", "toml", (255, 151, 98))
     );
+    let _ = writeln!(&mut output, "最小配置:");
     let _ = writeln!(&mut output, "```toml");
-    let _ = writeln!(&mut output, "{HELP_CONFIG_EXAMPLE}");
+    let _ = writeln!(&mut output, "{HELP_CONFIG_MINIMAL_EXAMPLE}");
+    let _ = writeln!(&mut output, "```");
+    let _ = writeln!(&mut output);
+    let _ = writeln!(&mut output, "完整覆盖示例:");
+    let _ = writeln!(&mut output, "```toml");
+    let _ = writeln!(&mut output, "{HELP_CONFIG_FULL_EXAMPLE}");
     let _ = writeln!(&mut output, "```");
     let _ = writeln!(&mut output);
 
@@ -615,31 +780,27 @@ fn render_help_text(kind: LauncherErrorKind, color_enabled: bool) -> String {
     let _ = writeln!(&mut output, "- `version`: 当前固定为 `1`。");
     let _ = writeln!(
         &mut output,
-        "- `name` / `description`: 用于 banner 和帮助输出。"
-    );
-    let _ = writeln!(
-        &mut output,
         "- `main_project`: 要执行 `dotnet build -c Release` 的主 `.csproj`。"
     );
     let _ = writeln!(
         &mut output,
-        "- `main_dll`: build 后用 `dotnet exec` 启动的主 DLL。"
+        "- `main_dll`: 可选；默认通过 `dotnet msbuild -p:Configuration=Release -getProperty:TargetFramework,AssemblyName,OutputPath` 推断。"
     );
     let _ = writeln!(
         &mut output,
-        "- `solution`: 可选；若存在，会进入缓存判定，但不会作为 build 目标。"
+        "- `solution`: 可选；若未填写且项目根顶层恰好只有一个 `.sln` / `.slnx`，会自动纳入缓存判定。"
     );
     let _ = writeln!(
         &mut output,
-        "- `scan_roots`: 用来搜集 `.cs` 源文件的目录列表。"
+        "- `scan_roots`: 可选；默认等于项目根目录，用来搜集 `.cs` 源文件。"
     );
     let _ = writeln!(
         &mut output,
-        "- `extra_inputs`: 手动补充其他会影响构建的输入文件。"
+        "- `extra_inputs`: 可选；手动补充其他会影响构建的输入文件。"
     );
     let _ = writeln!(
         &mut output,
-        "- `exclude_globs`: 排除模式，通常用于 `bin/`、`obj/`、`.git/`、`.doing/`。"
+        "- `exclude_globs`: 可选；未填写时默认排除 `bin/`、`obj/`、`.git/`、`.doing/`。"
     );
     let _ = writeln!(&mut output);
 
@@ -674,7 +835,7 @@ fn render_help_text(kind: LauncherErrorKind, color_enabled: bool) -> String {
     );
     let _ = writeln!(
         &mut output,
-        "任一被追踪输入变化、`cache.toml` 缺失/损坏、或主 DLL 不存在时，启动器都会重新执行 `dotnet build <main_project> -c Release`；否则直接 `dotnet exec <main_dll>`。"
+        "任一被追踪输入变化、`cache.toml` 缺失/损坏、或主 DLL 不存在时，启动器都会重新执行 `dotnet build <main_project> -c Release`；否则直接 `dotnet exec <main_dll>`。所有 `dotnet` 子进程都会收到 `DOING_ROOT=<.doing 的父目录>`。"
     );
     let _ = writeln!(&mut output);
 
@@ -693,7 +854,7 @@ fn render_help_text(kind: LauncherErrorKind, color_enabled: bool) -> String {
     );
     let _ = writeln!(
         &mut output,
-        "- 确认 `main_project`、`main_dll`、`solution`、`scan_roots` 的路径都是相对项目根而不是相对 `.doing`。"
+        "- 确认 `main_project`、`main_dll`、`solution`、`scan_roots` 的路径都是相对项目根而不是相对 `.doing`；如果不想手写 `main_dll`，可以省略让启动器自动推断。"
     );
     let _ = writeln!(
         &mut output,
@@ -1092,6 +1253,7 @@ fn run_build(config: &ResolvedConfig, dotnet_program: &OsStr, ui: &Ui) -> Result
         .arg(&config.main_project_rel)
         .arg("-c")
         .arg("Release")
+        .env("DOING_ROOT", &config.root_dir)
         .current_dir(&config.root_dir)
         .status()
         .with_context(|| format!("failed to launch `{}`", dotnet_program.to_string_lossy()))?;
@@ -1114,6 +1276,7 @@ fn run_exec(
     let mut command = Command::new(dotnet_program);
     command.arg("exec").arg(&config.main_dll);
     command.args(forwarded_args);
+    command.env("DOING_ROOT", &config.root_dir);
     command.current_dir(original_dir);
 
     let status = command
@@ -1276,6 +1439,8 @@ mod tests {
         assert!(help.contains(".doing/config.toml"));
         assert!(help.contains(".doing/cache.toml"));
         assert!(help.contains(".doing/.gitignore"));
+        assert!(help.contains("最小只需要 `version` 和 `main_project`"));
+        assert!(help.contains("version = 1\nmain_project = "));
         assert!(help.contains("main_project"));
         assert!(help.contains("main_dll"));
         assert!(help.contains("scan_roots"));
@@ -1284,7 +1449,13 @@ mod tests {
         assert!(help.contains("packages.lock.json"));
         assert!(help.contains("Directory.*.props"));
         assert!(help.contains("Directory.*.targets"));
+        assert!(help.contains("默认通过 `dotnet msbuild"));
+        assert!(help.contains("可选"));
+        assert!(help.contains("DOING_ROOT"));
         assert!(help.contains("相对路径都以 `.doing` 的父目录为基准解析"));
+        assert!(!help.contains("name = "));
+        assert!(!help.contains("description = "));
+        assert!(!help.contains("`name` / `description`"));
         assert!(!help.contains('\u{1b}'));
     }
 
@@ -1311,8 +1482,6 @@ mod tests {
         fixture.write_config(
             r#"
 version = 1
-name = "Doing"
-description = "A managed build runner powered by dotnet."
 main_project = "sources/managed/Doing.Cli/Missing.csproj"
 main_dll = "sources/managed/Doing.Cli/bin/Release/net10.0/Doing.Cli.dll"
 solution = "Doing.slnx"
@@ -1322,7 +1491,8 @@ exclude_globs = ["**/bin/**", "**/obj/**", "**/.git/**", "**/.doing/**"]
 "#,
         )?;
 
-        let error = Config::load(&fixture.doing_dir).expect_err("invalid project path should fail");
+        let error = Config::load(&fixture.doing_dir, OsStr::new("dotnet"))
+            .expect_err("invalid project path should fail");
         assert_eq!(error.kind, LauncherErrorKind::PathInvalid);
 
         let help = render_help_text(error.kind, false);
@@ -1334,9 +1504,10 @@ exclude_globs = ["**/bin/**", "**/obj/**", "**/.git/**", "**/.doing/**"]
     #[test]
     fn invalid_toml_is_classified_and_shows_example() -> Result<()> {
         let fixture = Fixture::new()?;
-        fixture.write_config("version = 1\nname = \"Doing\"\nscan_roots = [\n")?;
+        fixture.write_config("version = 1\nmain_project = \"sources/managed/Doing.Cli/Doing.Cli.csproj\"\nscan_roots = [\n")?;
 
-        let error = Config::load(&fixture.doing_dir).expect_err("invalid toml should fail");
+        let error = Config::load(&fixture.doing_dir, OsStr::new("dotnet"))
+            .expect_err("invalid toml should fail");
         assert_eq!(error.kind, LauncherErrorKind::ConfigParse);
 
         let help = render_help_text(error.kind, false);
@@ -1362,7 +1533,7 @@ exclude_globs = ["**/bin/**", "**/obj/**", "**/.git/**", "**/.doing/**"]
             "<Project />",
         )?;
 
-        let config = Config::load(&fixture.doing_dir)?;
+        let config = Config::load(&fixture.doing_dir, OsStr::new("dotnet"))?;
         let tracked = collect_tracked_inputs(&config)?;
         let tracked_paths = tracked
             .iter()
@@ -1450,6 +1621,7 @@ exclude_globs = ["**/bin/**", "**/obj/**", "**/.git/**", "**/.doing/**"]
         let fixture = Fixture::new()?;
         let dotnet = fixture.write_fake_dotnet()?;
         let start_dir = fixture.root.join("sources/managed/Doing.Cli");
+        let canonical_root = canonicalize_existing(&fixture.root)?;
 
         let first_exit = run_launcher(
             start_dir.clone(),
@@ -1459,8 +1631,10 @@ exclude_globs = ["**/bin/**", "**/obj/**", "**/.git/**", "**/.doing/**"]
         assert_eq!(first_exit, 23);
 
         let first_log = fs::read_to_string(fixture.log_path())?;
+        assert!(!first_log.contains("CMD=msbuild"));
         assert!(first_log.contains("CMD=build"));
         assert!(first_log.contains("CMD=exec"));
+        assert!(first_log.contains(&format!("DOING_ROOT={}", canonical_root.display())));
         assert!(first_log.contains("alpha --beta"));
         assert!(fixture.root.join(".doing/cache.toml").is_file());
 
@@ -1472,6 +1646,7 @@ exclude_globs = ["**/bin/**", "**/obj/**", "**/.git/**", "**/.doing/**"]
         let second_log = fs::read_to_string(fixture.log_path())?;
         assert!(!second_log.contains("CMD=build"));
         assert!(second_log.contains("CMD=exec"));
+        assert!(second_log.contains(&format!("DOING_ROOT={}", canonical_root.display())));
         assert!(second_log.contains(" again"));
 
         fs::write(
@@ -1490,7 +1665,91 @@ exclude_globs = ["**/bin/**", "**/obj/**", "**/.git/**", "**/.doing/**"]
         let third_log = fs::read_to_string(fixture.log_path())?;
         assert!(third_log.contains("CMD=build"));
         assert!(third_log.contains("CMD=exec"));
+        assert!(third_log.contains(&format!("DOING_ROOT={}", canonical_root.display())));
         assert!(third_log.contains(" changed"));
+
+        Ok(())
+    }
+
+    #[test]
+    fn minimal_config_works_with_msbuild_inference() -> Result<()> {
+        let fixture = Fixture::new()?;
+        fixture.write_config(
+            r#"
+version = 1
+main_project = "sources/managed/Doing.Cli/Doing.Cli.csproj"
+"#,
+        )?;
+        let dotnet = fixture.write_fake_dotnet()?;
+        let canonical_root = canonicalize_existing(&fixture.root)?;
+
+        let exit_code = run_launcher(
+            fixture.root.join("sources/managed/Doing.Cli"),
+            vec![OsString::from("minimal")],
+            dotnet.as_os_str(),
+        )?;
+        assert_eq!(exit_code, 23);
+
+        let config = Config::load(&fixture.doing_dir, dotnet.as_os_str())?;
+        assert_eq!(
+            config.main_dll,
+            canonical_root.join("sources/managed/Doing.Cli/bin/Release/net10.0/Doing.Cli.dll")
+        );
+        assert_eq!(config.scan_roots, vec![canonical_root.clone()]);
+        assert_eq!(config.solution, Some(canonical_root.join("Doing.slnx")));
+
+        let log = fs::read_to_string(fixture.log_path())?;
+        assert!(log.contains("CMD=msbuild"));
+        assert!(log.contains("CMD=build"));
+        assert!(log.contains("CMD=exec"));
+        assert!(log.contains(&format!("DOING_ROOT={}", canonical_root.display())));
+
+        Ok(())
+    }
+
+    #[test]
+    fn unique_solution_is_inferred_but_multiple_are_not() -> Result<()> {
+        let fixture = Fixture::new()?;
+        fixture.write_config(
+            r#"
+version = 1
+main_project = "sources/managed/Doing.Cli/Doing.Cli.csproj"
+main_dll = "sources/managed/Doing.Cli/bin/Release/net10.0/Doing.Cli.dll"
+"#,
+        )?;
+
+        let config = Config::load(&fixture.doing_dir, OsStr::new("dotnet"))?;
+        assert_eq!(
+            config.solution,
+            Some(canonicalize_existing(&fixture.root.join("Doing.slnx"))?)
+        );
+
+        fs::write(fixture.root.join("Other.sln"), "\n")?;
+        let config = Config::load(&fixture.doing_dir, OsStr::new("dotnet"))?;
+        assert_eq!(config.solution, None);
+
+        Ok(())
+    }
+
+    #[test]
+    fn legacy_name_and_description_are_ignored() -> Result<()> {
+        let fixture = Fixture::new()?;
+        fixture.write_config(
+            r#"
+version = 1
+name = "Legacy Doing"
+description = "Legacy description"
+main_project = "sources/managed/Doing.Cli/Doing.Cli.csproj"
+"#,
+        )?;
+        let dotnet = fixture.write_fake_dotnet()?;
+
+        let config = Config::load(&fixture.doing_dir, dotnet.as_os_str())?;
+        assert_eq!(
+            config.main_dll,
+            canonicalize_existing(&fixture.root)?
+                .join("sources/managed/Doing.Cli/bin/Release/net10.0/Doing.Cli.dll")
+        );
 
         Ok(())
     }
@@ -1515,8 +1774,6 @@ exclude_globs = ["**/bin/**", "**/obj/**", "**/.git/**", "**/.doing/**"]
                 doing_dir.join("config.toml"),
                 r#"
 version = 1
-name = "Doing"
-description = "A managed build runner powered by dotnet."
 main_project = "sources/managed/Doing.Cli/Doing.Cli.csproj"
 main_dll = "sources/managed/Doing.Cli/bin/Release/net10.0/Doing.Cli.dll"
 solution = "Doing.slnx"
@@ -1566,11 +1823,12 @@ exclude_globs = ["**/bin/**", "**/obj/**", "**/.git/**", "**/.doing/**"]
                 .root
                 .join("sources/managed/Doing.Cli/bin/Release/net10.0/Doing.Cli.dll");
             let log_path = self.log_path();
+            let msbuild_json = r#"{"Properties":{"TargetFramework":"net10.0","AssemblyName":"Doing.Cli","OutputPath":"bin\\Release/net10.0/"}}"#;
 
             let script = format!(
                 "#!/bin/sh\n\
 LOG=\"{}\"\n\
-printf 'PWD=%s CMD=%s ARGS=' \"$PWD\" \"$1\" >> \"$LOG\"\n\
+printf 'PWD=%s DOING_ROOT=%s CMD=%s ARGS=' \"$PWD\" \"$DOING_ROOT\" \"$1\" >> \"$LOG\"\n\
 shift\n\
 first=1\n\
 for arg in \"$@\"; do\n\
@@ -1586,6 +1844,10 @@ case \"$0\" in\n\
   *) ;;\n\
 esac\n\
 case \"$(tail -n 1 \"$LOG\" | sed 's/^.*CMD=//; s/ ARGS=.*$//')\" in\n\
+  msbuild)\n\
+    printf '%s\\n' '{}'\n\
+    exit 0\n\
+    ;;\n\
   build)\n\
     mkdir -p \"{}\"\n\
     : > \"{}\"\n\
@@ -1597,6 +1859,7 @@ case \"$(tail -n 1 \"$LOG\" | sed 's/^.*CMD=//; s/ ARGS=.*$//')\" in\n\
 esac\n\
 exit 99\n",
                 log_path.display(),
+                msbuild_json,
                 main_dll
                     .parent()
                     .expect("main dll should have a parent")

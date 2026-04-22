@@ -82,6 +82,7 @@ dependencies = [
  "ignore",
  "owo-colors",
  "serde",
+ "serde_json",
  "tempfile",
  "time",
  "toml",

@@ -1,6 +1,7 @@
 // Copyright (c) 2026 MoeGodot<me@kawayi.moe>.
 // Licensed under the GNU Affero General Public License v3-or-later license.
 
+using System.Collections.Immutable;
 using System.Diagnostics.CodeAnalysis;
 
 namespace Doing.Core;
@@ -31,20 +32,18 @@ public class UndescriptedTarget
     public Target Description(string description)
     {
         var target = new Target() { Source = Source, Name = Name, Description = description };
-        var task = Source.Targets[Name];
-        if (task is Target existedTarget)
+
+        if (Source.Targets.ContainsKey(Name))
         {
-            if (existedTarget.Description == description)
-            {
-                return existedTarget;
-            }
+            return target;
         }
-        Source.Targets[Name] = target;
+        Source.Targets.Add(target.Name, target);
+
         return target;
     }
 }
 
-public class Target : ITask
+public class Target : ITask,IDependentTask
 {
     public required TaskSet Source { get; init; }
     public required string Name { get; init; }
@@ -52,7 +51,9 @@ public class Target : ITask
 
     public string CommandLineName => Name.ToKebabCase();
 
-    public List<Target> Dependencies { get; } = [];
+    public ImmutableArray<string> Dependencies => _dependencies.ToImmutableArray();
+
+    private List<string> _dependencies = [];
 
     public Func<CancellationToken, Task> Action { get; set; } = _ => Task.CompletedTask;
 
@@ -94,15 +95,10 @@ public class Target : ITask
 
     public Target DependsOn(params Target[] target)
     {
-        Dependencies.AddRange(target);
-
+        _dependencies.AddRange(target.Select((dep => dep.Name)));
         return this;
     }
 
-    public Task Execute(CancellationToken cancellationToken = default) => Action?.Invoke(cancellationToken) ?? Task.CompletedTask;
-
-    public static implicit operator Target(Func<Target> value)
-    {
-        return value();
-    }
+    public Task Execute(CancellationToken cancellationToken = default)
+        => Action.Invoke(cancellationToken);
 }

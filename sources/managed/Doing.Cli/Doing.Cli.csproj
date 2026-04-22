@@ -5,6 +5,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Kawayi.Demystifier" />
     <PackageReference Include="Autofac.Extensions.DependencyInjection" />
     <PackageReference Include="Autofac" />
     <PackageReference Include="Serilog" />

@@ -18,6 +18,12 @@
           "Microsoft.Extensions.DependencyInjection.Abstractions": "10.0.4"
         }
       },
+      "Kawayi.Demystifier": {
+        "type": "Direct",
+        "requested": "[0.3.2, )",
+        "resolved": "0.3.2",
+        "contentHash": "KFHTPYYNbYJuXSuMIa7ghejlfyRLjRi0btaJdzkZ5rit81ZLXOpt1G3TYRVJMfxzg0UInLxR0huh4/uiNqJDAA=="
+      },
       "Microsoft.CodeAnalysis.BannedApiAnalyzers": {
         "type": "Direct",
         "requested": "[5.0.0-1.25277.114, )",
@@ -341,6 +347,7 @@
         "dependencies": {
           "Doing.IO": "[1.0.0, )",
           "Microsoft.Extensions.Hosting.Abstractions": "[10.0.6, )",
+          "Serilog": "[4.3.1, )",
           "System.CommandLine": "[2.0.6, )"
         }
       },
