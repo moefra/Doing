@@ -6,15 +6,7 @@ using System.Diagnostics.CodeAnalysis;
 
 namespace Doing.Core;
 
-public class UnsourcedTarget
-{
-    public UnnamedTarget Source(ITaskContainer taskContainer)
-    {
-        return new UnnamedTarget() { Source = taskContainer.TaskSet };
-    }
-}
-
-public class UnnamedTarget
+public sealed class UnnamedTarget
 {
     public required TaskSet Source { get; init; }
 
@@ -24,30 +16,23 @@ public class UnnamedTarget
     }
 }
 
-public class UndescriptedTarget
+public sealed class UndescriptedTarget
 {
     public required TaskSet Source { get; init; }
     public required string Name { get; init; }
 
     public Target Description(string description)
     {
-        var target = new Target() { Source = Source, Name = Name, Description = description };
-
-        if (Source.Targets.ContainsKey(Name))
-        {
-            return target;
-        }
-        Source.Targets.Add(target.Name, target);
-
+        var target = new Target(Source, Name, description);
         return target;
     }
 }
 
-public class Target : ITask,IDependentTask
+public sealed class Target : IDependentTask
 {
-    public required TaskSet Source { get; init; }
-    public required string Name { get; init; }
-    public required string Description { get; init; }
+    public TaskSet Source { get; init; }
+    public string Name { get; init; }
+    public string Description { get; init; }
 
     public string CommandLineName => Name.ToKebabCase();
 
@@ -57,12 +42,6 @@ public class Target : ITask,IDependentTask
 
     public Func<CancellationToken, Task> Action { get; set; } = _ => Task.CompletedTask;
 
-    public Target()
-    {
-
-    }
-
-    [SetsRequiredMembers]
     public Target(TaskSet set, string name, string description)
     {
         Source = set;
@@ -95,7 +74,7 @@ public class Target : ITask,IDependentTask
 
     public Target DependsOn(params Target[] target)
     {
-        _dependencies.AddRange(target.Select((dep => dep.Name)));
+        _dependencies.AddRange(target.Select(dep => dep.Name));
         return this;
     }
 
