@@ -81,9 +81,9 @@ public sealed class CollectTargetsInfoSourceGenerator : IIncrementalGenerator
         }
 
         ImmutableArray<CollectedTargetEntry> entries =
-            CollectEntries(type,context.SemanticModel.Compilation,cancellationToken,out ImmutableArray<Diagnostic> duplicateDiagnostics);
+            CollectEntries(type,context.SemanticModel.Compilation,cancellationToken,out ImmutableArray<Diagnostic> collectionDiagnostics);
 
-        diagnostics.AddRange(duplicateDiagnostics);
+        diagnostics.AddRange(collectionDiagnostics);
 
         return new TypeAnalysisResult(type,entries,diagnostics.ToImmutableArray(),canGenerateSource: true);
     }
@@ -123,7 +123,7 @@ public sealed class CollectTargetsInfoSourceGenerator : IIncrementalGenerator
         INamedTypeSymbol type,
         Compilation compilation,
         CancellationToken cancellationToken,
-        out ImmutableArray<Diagnostic> duplicateDiagnostics)
+        out ImmutableArray<Diagnostic> collectionDiagnostics)
     {
         List<CollectedTargetEntry> collectedEntries = [];
         List<Diagnostic> diagnostics = [];
@@ -155,15 +155,19 @@ public sealed class CollectTargetsInfoSourceGenerator : IIncrementalGenerator
             ExpressionSyntax actualExpression = expression!;
             SemanticModel actualSemanticModel = semanticModel!;
 
-            if (!TryExtractTargetInfo(actualExpression,actualSemanticModel,cancellationToken,out string? name,out string? description))
+            if (!TryExtractTargetInfo(actualExpression,actualSemanticModel,cancellationToken,out CollectedTargetEntry entry,out string? failureReason))
             {
+                diagnostics.Add(Diagnostic.Create(
+                    DiagnosticDescriptors.UnrecognizedTarget,
+                    member.Locations.First(static location => location.IsInSource),
+                    member.Name,
+                    type.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat),
+                    failureReason ?? "the target expression could not be statically analyzed"));
                 continue;
             }
 
-            if (name is null || description is null)
-            {
-                continue;
-            }
+            string name = entry.Name;
+            string description = entry.Description;
 
             if (!seenTargetNames.Add(name))
             {
@@ -175,10 +179,10 @@ public sealed class CollectTargetsInfoSourceGenerator : IIncrementalGenerator
                 continue;
             }
 
-            collectedEntries.Add(new CollectedTargetEntry(name,description));
+            collectedEntries.Add(entry);
         }
 
-        duplicateDiagnostics = diagnostics.ToImmutableArray();
+        collectionDiagnostics = diagnostics.ToImmutableArray();
         return collectedEntries.ToImmutableArray();
     }
 
@@ -230,46 +234,93 @@ public sealed class CollectTargetsInfoSourceGenerator : IIncrementalGenerator
         ExpressionSyntax expression,
         SemanticModel semanticModel,
         CancellationToken cancellationToken,
-        out string? name,
-        out string? description)
+        out CollectedTargetEntry entry,
+        out string? failureReason)
     {
-        name = null;
-        description = null;
+        entry = default;
+        failureReason = null;
 
-        if (semanticModel.GetOperation(expression,cancellationToken) is not IInvocationOperation descriptionInvocation)
+        if (semanticModel.GetOperation(expression,cancellationToken) is not IInvocationOperation rootInvocation)
         {
+            failureReason = "the initializer does not contain a supported Description(...) call";
             return false;
         }
 
-        if (!IsDescriptionInvocation(descriptionInvocation,out description))
+        if (!TryFindDescriptionInvocation(rootInvocation,out IInvocationOperation? descriptionInvocation,out failureReason)
+            || descriptionInvocation is null)
+        {
+            failureReason ??= "the initializer does not contain a supported Description(...) call";
+            return false;
+        }
+
+        if (!IsDescriptionInvocation(descriptionInvocation,out string? description,out failureReason))
         {
             return false;
         }
 
         if (descriptionInvocation.Instance is not IInvocationOperation nameInvocation)
         {
+            failureReason = "the Description(...) receiver is not a supported Name(...) call";
             return false;
         }
 
-        if (!IsNameInvocation(nameInvocation,out name))
+        if (!IsNameInvocation(nameInvocation,out string? name,out failureReason))
         {
             return false;
         }
 
         if (nameInvocation.Instance is not IInvocationOperation newInvocation)
         {
+            failureReason = "the Name(...) receiver is not a supported New() call";
             return false;
         }
 
-        return IsAllowedNewInvocation(newInvocation);
+        if (!IsAllowedNewInvocation(newInvocation))
+        {
+            failureReason = "the target chain must start from New() or this.New()";
+            return false;
+        }
+
+        entry = new CollectedTargetEntry(name!,description!);
+        return true;
     }
 
-    private static bool IsDescriptionInvocation(IInvocationOperation invocation,out string? description)
+    private static bool TryFindDescriptionInvocation(
+        IInvocationOperation rootInvocation,
+        out IInvocationOperation? descriptionInvocation,
+        out string? failureReason)
+    {
+        descriptionInvocation = null;
+        failureReason = null;
+
+        IInvocationOperation currentInvocation = rootInvocation;
+        while (true)
+        {
+            if (string.Equals(currentInvocation.TargetMethod.Name,"Description",StringComparison.Ordinal))
+            {
+                descriptionInvocation = currentInvocation;
+                return true;
+            }
+
+            if (!IsTargetFluentInvocation(currentInvocation)
+                || currentInvocation.Instance is not IInvocationOperation receiverInvocation)
+            {
+                failureReason = "the initializer does not contain a supported Description(...) call";
+                return false;
+            }
+
+            currentInvocation = receiverInvocation;
+        }
+    }
+
+    private static bool IsDescriptionInvocation(IInvocationOperation invocation,out string? description,out string? failureReason)
     {
         description = null;
+        failureReason = null;
 
         if (!string.Equals(invocation.TargetMethod.Name,"Description",StringComparison.Ordinal))
         {
+            failureReason = "the initializer does not contain a supported Description(...) call";
             return false;
         }
 
@@ -277,18 +328,27 @@ public sealed class CollectTargetsInfoSourceGenerator : IIncrementalGenerator
             || !TypeMatches(invocation.TargetMethod.ReturnType,TargetMetadataName)
             || invocation.Arguments.Length != 1)
         {
+            failureReason = "the Description(...) call does not match the expected Doing target syntax";
             return false;
         }
 
-        return TryGetLiteralString(invocation.Arguments[0],out description);
+        if (!TryGetCompileTimeConstantString(invocation.Arguments[0],out description))
+        {
+            failureReason = "the Description(...) argument is not a compile-time constant string";
+            return false;
+        }
+
+        return true;
     }
 
-    private static bool IsNameInvocation(IInvocationOperation invocation,out string? name)
+    private static bool IsNameInvocation(IInvocationOperation invocation,out string? name,out string? failureReason)
     {
         name = null;
+        failureReason = null;
 
         if (!string.Equals(invocation.TargetMethod.Name,"Name",StringComparison.Ordinal))
         {
+            failureReason = "the Description(...) receiver is not a supported Name(...) call";
             return false;
         }
 
@@ -296,10 +356,25 @@ public sealed class CollectTargetsInfoSourceGenerator : IIncrementalGenerator
             || !TypeMatches(invocation.TargetMethod.ReturnType,UndescriptedTargetMetadataName)
             || invocation.Arguments.Length != 1)
         {
+            failureReason = "the Name(...) call does not match the expected Doing target syntax";
             return false;
         }
 
-        return TryGetLiteralString(invocation.Arguments[0],out name);
+        if (!TryGetCompileTimeConstantString(invocation.Arguments[0],out name))
+        {
+            failureReason = "the Name(...) argument is not a compile-time constant string";
+            return false;
+        }
+
+        return true;
+    }
+
+    private static bool IsTargetFluentInvocation(IInvocationOperation invocation)
+    {
+        return !invocation.TargetMethod.IsStatic
+               && invocation.Instance is not null
+               && TypeMatches(invocation.TargetMethod.ContainingType,TargetMetadataName)
+               && TypeMatches(invocation.TargetMethod.ReturnType,TargetMetadataName);
     }
 
     private static bool IsAllowedNewInvocation(IInvocationOperation invocation)
@@ -328,12 +403,12 @@ public sealed class CollectTargetsInfoSourceGenerator : IIncrementalGenerator
         };
     }
 
-    private static bool TryGetLiteralString(IArgumentOperation argument,out string? value)
+    private static bool TryGetCompileTimeConstantString(IArgumentOperation argument,out string? value)
     {
-        if (argument.Value.Syntax is LiteralExpressionSyntax literalExpression
-            && literalExpression.IsKind(Microsoft.CodeAnalysis.CSharp.SyntaxKind.StringLiteralExpression))
+        Optional<object?> constantValue = argument.Value.ConstantValue;
+        if (constantValue.HasValue && constantValue.Value is string text)
         {
-            value = literalExpression.Token.ValueText;
+            value = text;
             return true;
         }
 
@@ -730,5 +805,14 @@ public sealed class CollectTargetsInfoSourceGenerator : IIncrementalGenerator
             defaultSeverity: DiagnosticSeverity.Warning,
             isEnabledByDefault: true,
             description: "CollectTargetsInfo collects target metadata by name. Duplicate names within the same annotated type are ignored after the first declaration and reported as warnings.");
+
+        public static readonly DiagnosticDescriptor UnrecognizedTarget = new(
+            id: "DOING008",
+            title: "Target could not be statically collected",
+            messageFormat: "Target member '{0}' in '{1}' could not be statically collected and will be ignored: {2}",
+            category: "Usage",
+            defaultSeverity: DiagnosticSeverity.Warning,
+            isEnabledByDefault: true,
+            description: "CollectTargetsInfo only collects targets whose Name, Description, and construction chain can be determined at compile time. Targets that cannot be analyzed are ignored and reported as warnings.");
     }
 }

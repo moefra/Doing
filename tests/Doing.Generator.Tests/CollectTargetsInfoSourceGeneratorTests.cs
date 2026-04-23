@@ -73,7 +73,7 @@ public class CollectTargetsInfoSourceGeneratorTests
     }
 
     [Test]
-    public async Task GeneratesEmptyDictionaryWhenNoRecognizedTargetsExist()
+    public async Task CollectsCompileTimeConstantNames()
     {
         string source = GeneratorTestHelper.BuildSource(
             """
@@ -81,11 +81,13 @@ public class CollectTargetsInfoSourceGeneratorTests
             public partial class BuildScript
             {
                 private readonly TaskSet _set = new([]);
-                private const string DynamicName = "Ignored";
+                private const string ConstName = "ConstTarget";
 
                 public UnnamedTarget New() => new() { Source = _set };
 
-                public Target Ignored => New().Name(DynamicName).Description("Ignored description");
+                public Target ConstTarget => New().Name(ConstName).Description("Const description");
+
+                public Target NameofTarget => New().Name(nameof(NameofTarget)).Description(nameof(BuildScript));
             }
             """);
 
@@ -99,7 +101,46 @@ public class CollectTargetsInfoSourceGeneratorTests
             assembly.GetType("TestCases.BuildScript")
             ?? throw new InvalidOperationException("Failed to find generated type."));
 
-        await Assert.That(info.Count).IsEqualTo(0);
+        await Assert.That(info.Count).IsEqualTo(2);
+        await Assert.That(info["ConstTarget"]).IsEqualTo("Const description");
+        await Assert.That(info["NameofTarget"]).IsEqualTo("BuildScript");
+    }
+
+    [Test]
+    public async Task CollectsTargetsWhenDescriptionIsFollowedByTargetFluentCalls()
+    {
+        string source = GeneratorTestHelper.BuildSource(
+            """
+            [CollectTargetsInfo]
+            public partial class BuildScript
+            {
+                private readonly TaskSet _set = new([]);
+
+                public UnnamedTarget New() => new() { Source = _set };
+
+                public Target BuildDotnet => New().Name(nameof(BuildDotnet))
+                                                  .Description("build the dotnet part of doing")
+                                                  .Executes(() => {});
+
+                public Target BuildManaged => New().Name(nameof(BuildManaged))
+                                                   .Description("build the managed code part of doing")
+                                                   .DependsOn(BuildDotnet);
+            }
+            """);
+
+        GeneratorTestResult result = GeneratorTestHelper.RunGenerator(source);
+        Assembly assembly = result.EmitToAssembly();
+
+        await Assert.That(result.GeneratorDiagnostics.Where(static diagnostic => diagnostic.Id == "DOING008")).IsEmpty();
+        await Assert.That(result.GetCompilationErrors()).IsEmpty();
+
+        ImmutableDictionary<string, string> info = GetCollectedTargets(
+            assembly.GetType("TestCases.BuildScript")
+            ?? throw new InvalidOperationException("Failed to find generated type."));
+
+        await Assert.That(info.Count).IsEqualTo(2);
+        await Assert.That(info["BuildDotnet"]).IsEqualTo("build the dotnet part of doing");
+        await Assert.That(info["BuildManaged"]).IsEqualTo("build the managed code part of doing");
     }
 
     [Test]
@@ -159,6 +200,112 @@ public class CollectTargetsInfoSourceGeneratorTests
 
         await Assert.That(info.Count).IsEqualTo(1);
         await Assert.That(info["Shared"]).IsEqualTo("First description");
+    }
+
+    [Test]
+    public async Task ReportsWarningForNonConstantNameAndSkipsTarget()
+    {
+        string source = GeneratorTestHelper.BuildSource(
+            """
+            [CollectTargetsInfo]
+            public partial class BuildScript
+            {
+                private readonly TaskSet _set = new([]);
+                private readonly string _dynamicName = "Ignored";
+
+                public UnnamedTarget New() => new() { Source = _set };
+
+                public Target Ignored => New().Name(_dynamicName).Description("Ignored description");
+            }
+            """);
+
+        GeneratorTestResult result = GeneratorTestHelper.RunGenerator(source);
+        Assembly assembly = result.EmitToAssembly();
+
+        Diagnostic diagnostic = result.GeneratorDiagnostics.Single(static diagnostic => diagnostic.Id == "DOING008");
+
+        await Assert.That(diagnostic.Id).IsEqualTo("DOING008");
+        await Assert.That(diagnostic.Severity).IsEqualTo(DiagnosticSeverity.Warning);
+        await Assert.That(diagnostic.GetMessage()).Contains("Ignored");
+        await Assert.That(diagnostic.GetMessage()).Contains("Name(...) argument is not a compile-time constant string");
+        await Assert.That(result.GetCompilationErrors()).IsEmpty();
+
+        ImmutableDictionary<string, string> info = GetCollectedTargets(
+            assembly.GetType("TestCases.BuildScript")
+            ?? throw new InvalidOperationException("Failed to find generated type."));
+
+        await Assert.That(info.Count).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task ReportsWarningForNonConstantDescriptionAndSkipsTarget()
+    {
+        string source = GeneratorTestHelper.BuildSource(
+            """
+            [CollectTargetsInfo]
+            public partial class BuildScript
+            {
+                private readonly TaskSet _set = new([]);
+                private readonly string _description = "Ignored description";
+
+                public UnnamedTarget New() => new() { Source = _set };
+
+                public Target Ignored => New().Name("Ignored").Description(_description);
+            }
+            """);
+
+        GeneratorTestResult result = GeneratorTestHelper.RunGenerator(source);
+        Assembly assembly = result.EmitToAssembly();
+
+        Diagnostic diagnostic = result.GeneratorDiagnostics.Single(static diagnostic => diagnostic.Id == "DOING008");
+
+        await Assert.That(diagnostic.Id).IsEqualTo("DOING008");
+        await Assert.That(diagnostic.Severity).IsEqualTo(DiagnosticSeverity.Warning);
+        await Assert.That(diagnostic.GetMessage()).Contains("Ignored");
+        await Assert.That(diagnostic.GetMessage()).Contains("Description(...) argument is not a compile-time constant string");
+        await Assert.That(result.GetCompilationErrors()).IsEmpty();
+
+        ImmutableDictionary<string, string> info = GetCollectedTargets(
+            assembly.GetType("TestCases.BuildScript")
+            ?? throw new InvalidOperationException("Failed to find generated type."));
+
+        await Assert.That(info.Count).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task ReportsWarningForUnsupportedNewChainAndSkipsTarget()
+    {
+        string source = GeneratorTestHelper.BuildSource(
+            """
+            [CollectTargetsInfo]
+            public partial class BuildScript
+            {
+                private readonly TaskSet _set = new([]);
+
+                public UnnamedTarget New() => new() { Source = _set };
+
+                public UnnamedTarget Create() => new() { Source = _set };
+
+                public Target Ignored => Create().Name("Ignored").Description("Ignored description");
+            }
+            """);
+
+        GeneratorTestResult result = GeneratorTestHelper.RunGenerator(source);
+        Assembly assembly = result.EmitToAssembly();
+
+        Diagnostic diagnostic = result.GeneratorDiagnostics.Single(static diagnostic => diagnostic.Id == "DOING008");
+
+        await Assert.That(diagnostic.Id).IsEqualTo("DOING008");
+        await Assert.That(diagnostic.Severity).IsEqualTo(DiagnosticSeverity.Warning);
+        await Assert.That(diagnostic.GetMessage()).Contains("Ignored");
+        await Assert.That(diagnostic.GetMessage()).Contains("must start from New() or this.New()");
+        await Assert.That(result.GetCompilationErrors()).IsEmpty();
+
+        ImmutableDictionary<string, string> info = GetCollectedTargets(
+            assembly.GetType("TestCases.BuildScript")
+            ?? throw new InvalidOperationException("Failed to find generated type."));
+
+        await Assert.That(info.Count).IsEqualTo(0);
     }
 
     private static ImmutableDictionary<string, string> GetCollectedTargets(Type buildScriptType)

@@ -6,7 +6,7 @@ namespace Doing.Building;
 
 [DoingBuild]
 [CollectTargetsInfo]
-partial class Program(ParsedBuildingOptions buildingOptions,
+public partial class Program(ParsedBuildingOptions buildingOptions,
                       [KeyFilter(DoingBuild.RootDirectoryPathKey)] DPath projectRootDirectory)
     : DoingBuild(buildingOptions,
     projectRootDirectory)
